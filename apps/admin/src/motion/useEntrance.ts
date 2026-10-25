@@ -48,6 +48,9 @@ export function useEntrance(root: RefObject<HTMLDivElement | null>, view: View, 
         reveal('.section-heading', .9)
         reveal('[data-motion="workspace-card"]', .98, { y: window.matchMedia('(max-width: 760px)').matches ? 8 : 16, stagger: .065 })
         reveal('.preview-note', 1.15, { y: 0 })
+      } else if (view === 'Products') {
+        reveal('.products-intro', .27, { y: 10 })
+        reveal('.products-surface', .34, { y: 10 })
       } else {
         reveal('.detail-intro', .27, { y: 10 })
         reveal('[data-motion="empty-state"]', .37)
@@ -56,7 +59,7 @@ export function useEntrance(root: RefObject<HTMLDivElement | null>, view: View, 
       }
       const finishForInput = () => { tl.progress(1) }
       const finishForFocus = (event: FocusEvent) => {
-        if ((event.target as HTMLElement).matches('button, a')) finishForInput()
+        if ((event.target as HTMLElement).matches('button, a, input, select, textarea')) finishForInput()
       }
       // Never make a keyboard user wait for a visually hidden control.
       const element = root.current

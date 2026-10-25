@@ -7,8 +7,14 @@ import { useEntrance } from './motion/useEntrance'
 import { useInteractions } from './motion/useInteractions'
 import { gsap, useGSAP } from './motion/gsap'
 import type { View } from './navigation'
+import { ProductProvider } from './features/products/ProductStore'
+import { ProductsPage } from './features/products/ProductsPage'
 
 export default function App() {
+  return <ProductProvider><AdminApp /></ProductProvider>
+}
+
+function AdminApp() {
   const { target, navigate } = useHashView()
   const [view, setView] = useState<View>(target)
   const root = useRef<HTMLDivElement>(null)
@@ -54,7 +60,7 @@ export default function App() {
           </div><span className="edition-label"><span className="edition-line" /> Interface preview</span>
         </div>
         <div className="view-content" data-view={view} data-motion="view">
-          {view === 'Dashboard' ? <DashboardPage onNavigate={navigate} /> : view === 'Sign in' ? <SignInPage onNavigate={navigate} /> : <WorkspacePage section={view} onNavigate={navigate} />}
+          {view === 'Dashboard' ? <DashboardPage onNavigate={navigate} /> : view === 'Products' ? <ProductsPage /> : view === 'Sign in' ? <SignInPage onNavigate={navigate} /> : <WorkspacePage section={view} onNavigate={navigate} />}
         </div>
       </div>
     </AdminLayout>
