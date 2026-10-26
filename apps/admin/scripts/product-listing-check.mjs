@@ -42,7 +42,7 @@ try {
   assert.equal((html.match(/<li>/g) || []).length, 3)
   const page = renderToStaticMarkup(createElement(ProductProvider, null, createElement(ProductsPage)))
   assert.match(page, /Local prototype/)
-  assert.match(page, /Coming next phase/)
+  assert.match(page, /Create a local prototype/)
   assert.match(page, /Reading your local collection/)
   assert.match(page, /disabled=""/)
   console.log('PASS: search, brand/availability combinations, all sort modes, stable ties, source immutability, EGP formatting, desktop/mobile markup, fallback thumbnail, provider loading state and disabled Add product')

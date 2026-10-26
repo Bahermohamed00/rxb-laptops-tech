@@ -3,6 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test": "node scripts/product-data-check.mjs && node scripts/product-listing-check.mjs && node scripts/product-crud-check.mjs && node scripts/inventory-check.mjs && node scripts/motion-check.mjs",
+    "typecheck": "tsc -b --pretty false",
     "dev": "vite --host 127.0.0.1 --port 5184 --strictPort",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 127.0.0.1 --port 4184 --strictPort"
@@ -17,6 +19,7 @@
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^4.6.0",
+    "jsdom": "^29.1.1",
     "typescript": "~5.8.3",
     "vite": "^6.3.5"
   }

@@ -1,10 +1,8 @@
-﻿// Run after temporarily installing jsdom in apps/admin/.motion-check.
+// Run with npm test --workspace @rxb/admin (jsdom is an admin dev dependency).
 // This checks DOM behavior, not browser layout or visual animation quality.
 import assert from 'node:assert/strict'
-import { createRequire } from 'node:module'
+import { JSDOM } from 'jsdom'
 import { createServer } from 'vite'
-const requireDOM = createRequire(new URL('../.motion-check/package.json', import.meta.url))
-const { JSDOM } = requireDOM('jsdom')
 const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', { url: 'http://localhost/#/dashboard', pretendToBeVisual: true })
 const { window } = dom
 for (const key of ['window', 'document', 'HTMLElement', 'Element', 'SVGElement', 'Event', 'MouseEvent']) globalThis[key] = key === 'window' ? window : window[key]

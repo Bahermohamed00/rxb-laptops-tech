@@ -51,6 +51,10 @@ export function useEntrance(root: RefObject<HTMLDivElement | null>, view: View, 
       } else if (view === 'Products') {
         reveal('.products-intro', .27, { y: 10 })
         reveal('.products-surface', .34, { y: 10 })
+      } else if (view === 'Inventory') {
+        reveal('.inventory-intro', .27, { y: 10 })
+        reveal('.inventory-overview', .32, { y: 8 })
+        reveal('.inventory-surface', .38, { y: 10 })
       } else {
         reveal('.detail-intro', .27, { y: 10 })
         reveal('[data-motion="empty-state"]', .37)

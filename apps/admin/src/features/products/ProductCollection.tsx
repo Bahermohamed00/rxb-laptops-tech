@@ -13,14 +13,16 @@ function ProductIdentity({ product }: { product: Product }) {
 function Updated({ product }: { product: Product }) {
   return <time dateTime={product.updatedAt}>{formatUpdated(product.updatedAt)}</time>
 }
-export function ProductCollection({ products }: { products: readonly Product[] }) {
+type ProductAction = 'details' | 'edit' | 'delete'
+export function ProductCollection({ products, onAction }: { products: readonly Product[]; onAction?: (action: ProductAction, product: Product) => void }) {
+  const actions = (product: Product) => onAction && <div className="product-row-actions" aria-label={`Actions for ${product.model}`}><button type="button" onClick={() => onAction('details', product)} aria-label={`View ${product.model}`}>Details</button><button type="button" onClick={() => onAction('edit', product)} aria-label={`Edit ${product.model}`}>Edit</button><button type="button" className="product-delete-action" onClick={() => onAction('delete', product)} aria-label={`Delete ${product.model}`}>Delete</button></div>
   return <>
     <div className="product-table-wrap">
       <table className="product-table"><caption className="product-sr-only">Local prototype products. Prices in EGP. Updated times in Cairo.</caption>
         <thead><tr><th scope="col">Product &amp; specifications</th><th scope="col">Price / EGP</th><th scope="col">Stock</th><th scope="col">Availability</th><th scope="col">Catalog status</th><th scope="col">Updated / Cairo</th></tr></thead>
-        <tbody>{products.map(product => <tr key={product.id}><th scope="row"><ProductIdentity product={product} /></th><td className="product-number">{formatPrice(product.priceMinor)}</td><td className="product-number">{product.stockQuantity.toLocaleString('en-EG')}</td><td><AvailabilityBadge product={product} /></td><td>{product.catalogStatus === 'listed' ? 'Listed locally' : 'Draft'}</td><td className="product-updated"><Updated product={product} /></td></tr>)}</tbody>
+        <tbody>{products.map(product => <tr key={product.id}><th scope="row"><ProductIdentity product={product} />{actions(product)}</th><td className="product-number">{formatPrice(product.priceMinor)}</td><td className="product-number">{product.stockQuantity.toLocaleString('en-EG')}</td><td><AvailabilityBadge product={product} /></td><td>{product.catalogStatus === 'listed' ? 'Listed locally' : 'Draft'}</td><td className="product-updated"><Updated product={product} /></td></tr>)}</tbody>
       </table>
     </div>
-    <ul className="product-mobile-list">{products.map(product => <li key={product.id}><ProductIdentity product={product} /><dl><div><dt>Price</dt><dd>{formatPrice(product.priceMinor)}</dd></div><div><dt>Stock quantity</dt><dd>{product.stockQuantity.toLocaleString('en-EG')}</dd></div><div><dt>Availability</dt><dd><AvailabilityBadge product={product} /></dd></div><div><dt>Catalog status</dt><dd>{product.catalogStatus === 'listed' ? 'Listed locally' : 'Draft'}</dd></div><div><dt>Updated / Cairo</dt><dd><Updated product={product} /></dd></div></dl></li>)}</ul>
+    <ul className="product-mobile-list">{products.map(product => <li key={product.id}><ProductIdentity product={product} /><dl><div><dt>Price</dt><dd>{formatPrice(product.priceMinor)}</dd></div><div><dt>Prototype quantity</dt><dd>{product.stockQuantity.toLocaleString('en-EG')}</dd></div><div><dt>Availability</dt><dd><AvailabilityBadge product={product} /></dd></div><div><dt>Catalog status</dt><dd>{product.catalogStatus === 'listed' ? 'Listed locally' : 'Draft'}</dd></div><div><dt>Updated / Cairo</dt><dd><Updated product={product} /></dd></div></dl>{actions(product)}</li>)}</ul>
   </>
 }

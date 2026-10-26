@@ -1,4 +1,30 @@
-﻿# Product data foundation — Phase 4.2
+# Products — development-only CRUD
+
+## Current UI
+
+Products supports Add/Edit drawers, a details drawer, and a delete confirmation dialog. All records remain local prototypes using the existing controller, validation, storage key, and schema. No backend endpoints, storefront changes, automatic fixtures, or real stock operations are introduced.
+
+- `ProductEditor.tsx` owns form drafts and feedback; `product.form.ts` parses text to the existing `ProductInput`. EGP input is converted to integer piastres without silently rounding extra decimals. Optional fields can be cleared through the existing full-replacement update semantics.
+- `ProductDetails.tsx` observes the current validated record, including optional specifications and metadata. Deleted/unavailable records are explicitly reported.
+- `DeleteProductDialog.tsx` only removes a record after confirmation; a failed write leaves the dialog and saved data intact.
+- `components/ModalSurface.tsx` supplies native modal focus containment, background inertness, focus restoration, scroll locking, GSAP entrance/exit transitions, reduced motion, and timer cleanup.
+- `product-crud.css` adds scoped forms/actions/details styling using the existing RXB tokens. Desktop tables and responsive cards both expose Details, Edit, and Delete.
+
+Editors and delete dialogs capture the catalog token when opened. External changes never silently replace a draft or authorize an overwrite. After a conflict, close and reopen the editor against the latest catalog. Unsaved edits require an explicit discard on dismissal; refresh/close uses the browser's unsaved-change prompt. Cancelled hash navigation restores the editor without overwriting the previous route. Successful saves reset listing filters so the saved record can be found immediately.
+
+The development UI calls `useProductActions()` only; it does not read or write localStorage directly. A future API integration must introduce an asynchronous controller/repository boundary, map server errors to form feedback, and replace prototype concurrency tokens with agreed server preconditions. The current storage adapter is synchronous and is not an HTTP implementation. No endpoints or backend fields have been finalized.
+
+Run from the repository root:
+
+```sh
+npm test --workspace @rxb/admin
+npm run typecheck --workspace @rxb/admin
+npm run build:admin
+```
+
+`product-crud-check.mjs` mounts real React components with the real controller and an injected in-memory storage port. Its synthetic records never touch a user's catalog. It covers invalid forms, precise money parsing, blank numeric fields, field focus, create/read/update/delete, optional clearing, storage failures, stale editors, discard protection, browser Back history, and cleanup. jsdom's dialog top layer is stubbed only because jsdom does not implement it; native focus containment and visual motion require browser verification.
+
+## Historical foundation notes — Phase 4.2 / 4.3
 
 Phase 4.3 mounts ProductProvider above the keyed admin page boundary. Initialization reads the catalog without writing; ProductsPage exposes a read-only listing. Test products in `scripts/product-data-check.mjs` use an in-memory adapter only.
 
