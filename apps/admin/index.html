@@ -4,6 +4,19 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#080c12" />
+    <script>
+      try {
+        const savedTheme = document.cookie.split('; ').find(value => value.startsWith('rxb-theme='))?.split('=')[1]
+          || localStorage.getItem('rxb-theme')
+        const theme = savedTheme === 'light' || savedTheme === 'dark'
+          ? savedTheme
+          : matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+        document.documentElement.dataset.theme = theme
+        document.documentElement.style.colorScheme = theme
+      } catch {
+        document.documentElement.dataset.theme = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+      }
+    </script>
     <meta name="description" content="RXB Laptops / Tech administration preview." />
     <title>RXB Admin</title>
   </head>

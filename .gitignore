@@ -5,6 +5,10 @@ node_modules/
 # Build output and local caches
 dist/
 **/dist/
+apps/api/build/
+apps/api/generated/
+apps/api/.phase1-build/
+apps/api/src/generated/prisma-client/
 dist-ssr/
 .vite/
 coverage/
@@ -13,6 +17,9 @@ coverage/
 # Environment files and local secrets
 .env
 .env.*
+!**/.env.example
+.local-images/
+**/.local-images/
 
 # Logs
 *.log

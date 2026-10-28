@@ -1,0 +1,19 @@
+.about-hero { min-height:440px; display:flex; flex-direction:column; align-items:flex-start; justify-content:center; padding-top:70px; padding-bottom:70px; border-bottom:1px solid var(--line); }
+.about-hero h1 { margin:22px 0 16px; color:#f1f4f8; font:500 clamp(46px,8vw,86px)/.98 var(--display); letter-spacing:-.07em; }
+.about-hero h1 em { color:#b8c1cf; font-style:normal; font-weight:400; }
+.about-hero>p { max-width:620px; margin:0 0 24px; color:#9aa8b8; font-size:14px; line-height:1.8; }
+.about-content { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; padding-top:54px; padding-bottom:70px; }
+.about-content article { min-height:190px; padding:22px; border:1px solid #26384d; border-radius:6px; background:#0b121b; }
+.about-content article>span { color:#82b5ec; font:9px var(--mono); letter-spacing:.12em; }
+.about-content h2 { margin:25px 0 9px; color:#f0f4f9; font:500 20px var(--display); }
+.about-content p { margin:0; color:#9aa8b8; font-size:12px; line-height:1.7; }
+.site-footer-grid { display:grid; grid-template-columns:1.5fr 1fr 1fr; gap:30px; padding-top:35px; padding-bottom:24px; }
+.site-footer-brand p { max-width:250px; margin:13px 0 0; color:#8b9aae; font-size:11px; line-height:1.6; }
+.site-footer nav { display:grid; align-content:start; justify-items:start; gap:11px; }
+.site-footer nav strong { margin-bottom:3px; color:#83b7ed; font:9px var(--mono); letter-spacing:.12em; }
+.site-footer nav a,.site-footer-legal { color:#98a6b8; font-size:10px; }
+.site-footer nav a:hover { color:#fff; }
+.site-footer a:focus-visible { outline:2px solid #61c7ff; outline-offset:3px; }
+.site-footer-legal { grid-column:1/-1; display:flex; justify-content:space-between; gap:16px; padding-top:19px; border-top:1px solid var(--line); }
+[data-theme="light"] .about-hero { border-color:#dce4ed; }
+@media(max-width:700px){.about-hero{min-height:390px;padding-top:55px;padding-bottom:55px}.about-content{grid-template-columns:1fr;padding-top:35px;padding-bottom:45px}.about-content article{min-height:0}.about-content h2{margin-top:18px}.site-footer-grid{grid-template-columns:1fr 1fr;gap:25px 18px}.site-footer-brand{grid-column:1/-1}.site-footer-legal{flex-direction:column;gap:7px}}

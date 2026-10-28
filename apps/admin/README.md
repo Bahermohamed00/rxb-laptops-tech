@@ -14,6 +14,8 @@ npm run preview:admin
 
 Navy surfaces, electric blue accents, Manrope headings, and DM Sans interface text remain intact. Color, typography, spacing, responsive layout, and surface tokens live in `src/styles.css`. The existing isometric SVG remains the dashboard's focal point.
 
+The Admin supports light and dark themes. It follows the device preference on first visit, then persists a user selection in the `rxb-theme` cookie and local storage. The preference is read before styles load to reduce flashes and is shared with the Storefront when both apps use the same hostname.
+
 ## Phase 2 motion architecture
 
 Runtime dependencies are `gsap` 3.15.0 and `@gsap/react` 2.1.2. Registration happens once in `src/motion/gsap.ts`. All animation selectors are scoped to component refs. `useGSAP`, `gsap.matchMedia`, and context-bound event handlers own animation cleanup, including React Strict Mode remounts and live reduced-motion changes.

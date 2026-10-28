@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node scripts/product-data-check.mjs && node scripts/product-listing-check.mjs && node scripts/product-crud-check.mjs && node scripts/inventory-check.mjs && node scripts/motion-check.mjs",
+    "test": "node scripts/product-data-check.mjs && node scripts/product-listing-check.mjs && node scripts/product-crud-check.mjs && node scripts/inventory-check.mjs && node scripts/motion-check.mjs && node scripts/signin-check.mjs",
     "typecheck": "tsc -b --pretty false",
     "dev": "vite --host 127.0.0.1 --port 5184 --strictPort",
     "build": "tsc -b && vite build",

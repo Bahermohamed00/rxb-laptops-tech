@@ -19,6 +19,17 @@
 .modal-dialog .modal-body p { margin: 0 0 16px; }
 .modal-surface .button-danger { background: #512b2c; border-color: #a66b65; color: #ffe1dc; }
 .modal-surface .button-danger:hover { background: #673536; }
+:root[data-theme="light"] .modal-surface::backdrop { background:#18304acc; }
+:root[data-theme="light"] .modal-panel { background:#fff; border-color:#d5e0ec; }
+:root[data-theme="light"] .modal-header,
+:root[data-theme="light"] .modal-footer { background:#f4f7fb; border-color:#dfe7ef; }
+:root[data-theme="light"] .modal-header h2 { color:#18283d; }
+:root[data-theme="light"] .modal-header p,
+:root[data-theme="light"] .modal-footer-note { color:#586b81; }
+:root[data-theme="light"] .modal-context { color:#1768c4; }
+:root[data-theme="light"] .modal-close { color:#344a63; background:#fff; border-color:#cbd6e3; }
+:root[data-theme="light"] .modal-close:hover { background:#edf4fb; }
+:root[data-theme="light"] .modal-surface :is(input,select,textarea) { color:#18283d; background:#fff; border-color:#cbd6e3; }
 @media (max-width: 560px) {
   .modal-header { padding: 22px 20px 18px; gap: 12px; }
   .modal-header h2 { font-size: 26px; }

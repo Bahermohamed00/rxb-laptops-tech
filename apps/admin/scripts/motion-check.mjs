@@ -3,14 +3,16 @@
 import assert from 'node:assert/strict'
 import { JSDOM } from 'jsdom'
 import { createServer } from 'vite'
+import { installAdminSessionMock } from './mock-admin-session.mjs'
 const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', { url: 'http://localhost/#/dashboard', pretendToBeVisual: true })
 const { window } = dom
-for (const key of ['window', 'document', 'HTMLElement', 'Element', 'SVGElement', 'Event', 'MouseEvent']) globalThis[key] = key === 'window' ? window : window[key]
+for (const key of ['window', 'document', 'HTMLElement', 'Element', 'SVGElement', 'Event', 'CustomEvent', 'MouseEvent']) globalThis[key] = key === 'window' ? window : window[key]
 Object.defineProperty(globalThis, 'navigator', { value: window.navigator, configurable: true })
 globalThis.getComputedStyle = window.getComputedStyle.bind(window)
 globalThis.requestAnimationFrame = window.requestAnimationFrame.bind(window)
 globalThis.cancelAnimationFrame = window.cancelAnimationFrame.bind(window)
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
+const restoreFetch = installAdminSessionMock()
 let reduced = true
 let mobile = false
 const queries = []
@@ -68,12 +70,10 @@ try {
     assert.equal(document.querySelectorAll('[aria-current="page"]').length, 1)
     assert.equal(document.querySelector('.view-stage').hasAttribute('inert'), false)
   }
-  await click(button('Sign in'))
-  assert.equal(heading(), 'Sign in')
-  assert.ok(button('Sign in unavailable').disabled)
+  assert.ok(button('Sign out'))
+  assert.ok(document.querySelector('.preview-label').textContent.includes('Authenticated admin'))
   assert.equal(document.querySelectorAll('input').length, 0)
-  await click(button('Back to dashboard'))
-  console.log('PASS: reduced motion, six sections, sign-in, focus, hashes and unavailable credentials')
+  console.log('PASS: reduced motion, six sections, authenticated workspace, focus and hashes')
 
   await click(button('Products'))
   await click(button('Inventory'))
@@ -120,10 +120,13 @@ try {
 
   await act(async () => { mobile = true; mediaChange() })
   await settle()
-  await click(button('Hide navigation−'))
+  await click(button('Menu'))
+  assert.equal(document.querySelector('#admin-navigation').inert, false)
+  assert.equal(document.querySelector('.nav-toggle').getAttribute('aria-expanded'), 'true')
+  await click(button('Close'))
   assert.equal(document.querySelector('#admin-navigation').inert, true)
   assert.equal(document.querySelector('.nav-toggle').getAttribute('aria-expanded'), 'false')
-  await click(button('Show navigation+'))
+  await click(button('Menu'))
   assert.equal(document.querySelector('#admin-navigation').inert, false)
   await act(async () => { reduced = true; mediaChange() })
   await settle()
@@ -152,6 +155,7 @@ try {
   if (root) await act(async () => root.unmount())
   console.error = originalError
   console.warn = originalWarn
+  restoreFetch()
   gsap?.ticker.sleep()
   await server.close()
   window.close()
