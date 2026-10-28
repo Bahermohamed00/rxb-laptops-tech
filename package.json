@@ -1,9 +1,24 @@
 {
-  "name": "rxb-laptops-tech-prototype",
+  "name": "rxb-laptops-tech",
   "private": true,
-  "version": "0.1.0",
-  "type": "module",
-  "scripts": { "dev": "vite", "build": "tsc -b && vite build", "preview": "vite preview" },
-  "dependencies": { "react": "^19.1.0", "react-dom": "^19.1.0" },
-  "devDependencies": { "@types/react": "^19.1.0", "@types/react-dom": "^19.1.0", "@vitejs/plugin-react": "^4.6.0", "typescript": "~5.8.3", "vite": "^6.3.5" }
+  "workspaces": [
+    "apps/storefront",
+    "apps/admin",
+    "apps/api"
+  ],
+  "scripts": {
+    "dev:storefront": "npm run dev --workspace @rxb/storefront",
+    "build:storefront": "npm run build --workspace @rxb/storefront",
+    "preview:storefront": "npm run preview --workspace @rxb/storefront",
+    "dev:admin": "npm run dev --workspace @rxb/admin",
+    "build:admin": "npm run build --workspace @rxb/admin",
+    "preview:admin": "npm run preview --workspace @rxb/admin",
+    "dev:api": "npm run dev --workspace @rxb/api",
+    "build:api": "npm run build --workspace @rxb/api",
+    "start:api": "npm run start --workspace @rxb/api",
+    "typecheck:api": "npm run typecheck --workspace @rxb/api",
+    "test:api": "npm test --workspace @rxb/api",
+    "create:admin": "npm run admin:create --workspace @rxb/api",
+    "seed:sample-products": "npm run seed:samples --workspace @rxb/api"
+  }
 }
