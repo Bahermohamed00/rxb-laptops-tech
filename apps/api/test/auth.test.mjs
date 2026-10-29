@@ -26,6 +26,13 @@ const [{ Test }, { AppModule }, { PrismaService }, { configureApiApp }, { valida
   import('../.phase1-build/auth/auth.service.js'),
 ]);
 
+function browserCookieForPath(setCookie, requestPath) {
+  const cookiePath = setCookie.match(/(?:^|;)\s*Path=([^;]+)/i)?.[1] ?? '/';
+  const pathMatches = requestPath === cookiePath
+    || requestPath.startsWith(cookiePath.endsWith('/') ? cookiePath : `${cookiePath}/`);
+  return pathMatches ? setCookie.split(';', 1)[0] : undefined;
+}
+
 test('health, admin sessions, authorization, CORS, environment, and login limits', async t => {
   const passwordHash = await argon2.hash('test-admin-password', { type: argon2.argon2id, memoryCost: 19_456, timeCost: 2, parallelism: 1 });
   const admin = { id: 'd5d0f7c0-8136-4e7b-a932-a11653ec389a', email: 'admin@example.test', passwordHash, role: AdminRole.SUPER_ADMIN, status: 'ACTIVE', lastLoginAt: null };
@@ -52,6 +59,11 @@ test('health, admin sessions, authorization, CORS, environment, and login limits
       },
       update: async ({ where, data }) => Object.assign(sessions.get(where.id), data),
     },
+    product: {
+      count: async () => 0,
+      findMany: async () => [],
+    },
+    $transaction: async operations => Promise.all(operations),
   };
 
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
@@ -102,8 +114,13 @@ test('health, admin sessions, authorization, CORS, environment, and login limits
     assert.match(cookie, /^rxb_admin_session=/);
     assert.match(cookie, /HttpOnly/i);
     assert.match(cookie, /SameSite=Lax/i);
-    assert.match(cookie, /Path=\/api\/auth/i);
+    assert.match(cookie, /Path=\/api(?:;|$)/i);
     assert.doesNotMatch(cookie, /Secure/i, 'test mode is not production');
+    const browserCookie = browserCookieForPath(cookie, '/api/admin/products');
+    assert.ok(browserCookie, 'browser should send the session cookie to /api/admin/products');
+    const adminProducts = await request('/admin/products', { headers: { Cookie: browserCookie } });
+    assert.equal(adminProducts.status, 200);
+    assert.deepEqual(await adminProducts.json(), { items: [], total: 0, page: 1, pageSize: 12 });
     const token = cookie.split(';')[0].split('=').slice(1).join('=');
     assert.equal([...sessions.values()].at(-1).tokenHash, createHash('sha256').update(token).digest('hex'));
     return { cookie: cookie.split(';')[0], csrfToken: body.csrfToken, sessionId: [...sessions.keys()].at(-1) };
@@ -121,7 +138,11 @@ test('health, admin sessions, authorization, CORS, environment, and login limits
     assert.deepEqual(session.user, { id: admin.id, email: admin.email, role: 'SUPER_ADMIN', status: 'ACTIVE' });
     assert.equal(session.csrfToken, body.csrfToken);
     assert.equal(typeof session.expiresAt, 'string');
-    assert.match(response.headers.getSetCookie()[0], /HttpOnly/i);
+    const refreshedCookie = response.headers.getSetCookie()[0];
+    assert.match(refreshedCookie, /^rxb_admin_session=/);
+    assert.match(refreshedCookie, /Path=\/api(?:;|$)/i);
+    assert.match(refreshedCookie, /HttpOnly/i);
+    assert.match(refreshedCookie, /SameSite=Lax/i);
     assert.equal(response.headers.get('cache-control'), 'no-store');
   });
 
@@ -130,7 +151,12 @@ test('health, admin sessions, authorization, CORS, environment, and login limits
     assert.equal(csrfRejected.status, 403);
     const response = await request('/auth/logout', { method: 'POST', headers: { Cookie: validSession.cookie, 'Content-Type': 'application/json', 'X-CSRF-Token': validSession.csrfToken }, body: '{}' });
     assert.equal(response.status, 204);
-    assert.match(response.headers.getSetCookie()[0], /Expires=Thu, 01 Jan 1970/i);
+    const clearedCookie = response.headers.getSetCookie()[0];
+    assert.match(clearedCookie, /^rxb_admin_session=;/);
+    assert.match(clearedCookie, /Path=\/api(?:;|$)/i);
+    assert.match(clearedCookie, /HttpOnly/i);
+    assert.match(clearedCookie, /SameSite=Lax/i);
+    assert.match(clearedCookie, /Expires=Thu, 01 Jan 1970/i);
     assert.ok(sessions.get(validSession.sessionId).revokedAt);
     const afterLogout = await request('/auth/session', { headers: { Cookie: validSession.cookie } });
     assert.equal(afterLogout.status, 401);
