@@ -39,6 +39,24 @@
   --text-lg: 18px;
   --mono: "DM Mono",monospace;
   --display: "Manrope","DM Sans",sans-serif;
+  /* Storefront (reference design) tokens */
+  --sf-bg: #050912;
+  --sf-card: #0a1120;
+  --sf-card-2: #0d1528;
+  --sf-line: rgba(130, 160, 214, .16);
+  --sf-line-strong: rgba(130, 160, 214, .3);
+  --sf-blue: #1d6dff;
+  --sf-blue-hover: #3a82ff;
+  --sf-electric: #2f7dff;
+  --sf-text: #eef3fb;
+  --sf-muted: #a3afc3;
+  --sf-dim: #75839b;
+  --sf-green: #1fb85a;
+  --sf-red: #ff4b55;
+  --sf-container: 1344px;
+  --sf-gutter: clamp(16px, 3vw, 40px);
+  --sf-radius: 8px;
+  --sf-body: "DM Sans", system-ui, sans-serif;
 }
 :root[data-theme="light"] {
   color-scheme: light;
@@ -62,6 +80,10 @@
 }
 * {
   box-sizing: border-box;
+}
+.sf-container {
+  width: min(var(--sf-container), 100% - 2 * var(--sf-gutter));
+  margin-inline: auto;
 }
 html {
   scroll-behavior: smooth;
@@ -218,6 +240,8 @@ button {
 [data-theme="light"] .product-detail-configuration,
 [data-theme="light"] .product-detail-specifications dl>div,
 [data-theme="light"] .product-detail-media { color:#344a63; background:#fff; border-color:#d8e1eb; }
+[data-theme="light"] .product-detail-thumbs button { background:#fff; border-color:#d8e1eb; }
+[data-theme="light"] .product-detail-thumbs button.is-active { border-color:#1687ff; }
 [data-theme="light"] .catalog-state strong,
 [data-theme="light"] .product-detail-purchase h1,
 [data-theme="light"] .product-detail-specifications h2 { color:#17263a; }

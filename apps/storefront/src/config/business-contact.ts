@@ -36,3 +36,15 @@ export function productInquiryMessage(
 export function generalInquiryUrl() {
   return whatsappUrl('Hello RXB, I have a general question about your laptop and technology listings.')
 }
+
+export function topicInquiryUrl(topic: string) {
+  return whatsappUrl(`Hello RXB, I have a question about ${topic}.`)
+}
+
+/** Public social profiles. Leave a value empty to hide its icon in the footer. */
+export const SOCIAL_LINKS: { label: string; url: string }[] = [
+  { label: 'Facebook', url: '' },
+  { label: 'Instagram', url: '' },
+  { label: 'YouTube', url: '' },
+  { label: 'TikTok', url: '' },
+]

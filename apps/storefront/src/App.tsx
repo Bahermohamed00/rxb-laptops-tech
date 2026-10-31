@@ -7,7 +7,7 @@ import { useTheme } from './theme/useTheme'
 
 export default function App() {
   const { theme, toggleTheme } = useTheme()
-  const [introVisible, setIntroVisible] = useState(() => !window.location.pathname.startsWith('/products/'))
+  const [introVisible, setIntroVisible] = useState(() => window.location.pathname === '/')
   const [path, setPath] = useState(window.location.pathname)
   useEffect(() => {
     const updatePath = () => setPath(window.location.pathname)
@@ -17,7 +17,7 @@ export default function App() {
 
   if (path === '/about') return <><AboutPage theme={theme} onToggleTheme={toggleTheme} /><FloatingWhatsApp /></>
   return <>
-    <HomePage introVisible={introVisible} theme={theme} onToggleTheme={toggleTheme} />
+    <HomePage introVisible={introVisible} />
     {introVisible && <IntroScreen onComplete={() => setIntroVisible(false)} theme={theme} onToggleTheme={toggleTheme} />}
     <FloatingWhatsApp />
   </>
