@@ -1,3 +1,7 @@
+// Load .env into process.env before validating it below. ConfigModule only
+// copies string values back to process.env, so parsed lists such as
+// CORS_ORIGINS would otherwise silently fall back to their defaults.
+import 'dotenv/config';
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module.js';

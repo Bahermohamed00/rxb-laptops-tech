@@ -79,6 +79,7 @@
 .product-upload-empty small,.product-upload-preview span { color:#94a7bd; font-size:10px; }
 .product-upload.is-dragging .product-upload-empty { border-color:#58a8ff; background:#112540; }
 .product-upload-input { position:absolute; width:1px!important; height:1px!important; clip:rect(0,0,0,0); overflow:hidden; }
+.product-upload-gallery { display:grid; gap:8px; margin:0; padding:0; list-style:none; }
 .product-upload-preview { display:flex; align-items:center; gap:16px; padding:12px; border:1px solid #344a63; border-radius:6px; background:#0a121d; }
 .product-upload-preview img { width:100px; height:75px; border-radius:4px; object-fit:cover; }
 .product-upload-preview > div { display:grid; gap:7px; }

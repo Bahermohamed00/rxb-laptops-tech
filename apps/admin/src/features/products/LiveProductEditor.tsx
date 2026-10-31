@@ -29,7 +29,7 @@ export function LiveProductEditor({ product, initialProductType = 'LAPTOP', csrf
   const [ramOptions, setRamOptions] = useState(() => optionsFrom(product, 'ram'))
   const [storageOptions, setStorageOptions] = useState(() => optionsFrom(product, 'storage'))
   const [combinations, setCombinations] = useState<UpgradeCombination[]>(() => product?.combinations ?? [])
-  const [image, setImage] = useState(product?.image ?? null)
+  const [images, setImages] = useState(product?.images ?? [])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
@@ -37,7 +37,7 @@ export function LiveProductEditor({ product, initialProductType = 'LAPTOP', csrf
   const formRef = useRef<HTMLFormElement>(null)
   const initialSnapshot = useRef<string | null>(null)
   const skipNavigationGuard = useRef(false)
-  const snapshot = JSON.stringify({ draft, productType, specsDraft, ramOptions, storageOptions, combinations, imageId: image?.id ?? null })
+  const snapshot = JSON.stringify({ draft, productType, specsDraft, ramOptions, storageOptions, combinations, imageIds: images.map(image => image.id) })
   if (initialSnapshot.current === null) initialSnapshot.current = snapshot
   const isDirty = snapshot !== initialSnapshot.current
   useEffect(() => {
@@ -184,7 +184,7 @@ export function LiveProductEditor({ product, initialProductType = 'LAPTOP', csrf
         } : {}),
         stockQuantity: stock,
         specs: laptop ? {} : accessorySpecValues,
-        ...(image ? { imageId: image.id } : {}), ramOptions: [], storageOptions: [], combinations: [],
+        imageIds: images.map(image => image.id), ramOptions: [], storageOptions: [], combinations: [],
       }
       if (laptop) {
         payload.ramOptions = parsedOptions(ramOptions, 'ram')
@@ -255,7 +255,7 @@ export function LiveProductEditor({ product, initialProductType = 'LAPTOP', csrf
         <label>Listing status<select value={draft.status} onChange={event => change('status', event.target.value as Draft['status'])}><option value="DRAFT">Draft (not public)</option><option value="ACTIVE">Published</option><option value="ARCHIVED">Archived</option></select></label>
         <label>Condition notes<input maxLength={1000} value={draft.notes} onChange={event => change('notes', event.target.value)} /></label>
         <label className="live-field-wide">Short description<textarea name="description" aria-invalid={Boolean(fieldErrors.description)} aria-describedby={fieldErrors.description ? 'field-error-description' : undefined} rows={3} maxLength={10000} value={draft.description} onChange={event => change('description', event.target.value)} placeholder={isLaptop ? 'A short, accurate summary of this laptop.' : 'Describe the accessory and its supported features.'} />{fieldError('description')}</label>
-        <div className="live-field-wide" data-error-target="imageId" tabIndex={-1}><span className="live-form-label">Main product image</span><ProductImageUpload key={product?.id ?? 'new'} csrfToken={csrfToken} initial={image} onChange={setImage} />{fieldError('imageId')}</div>
+        <div className="live-field-wide" data-error-target="imageIds" tabIndex={-1}><span className="live-form-label">Product images · the first image is the main one</span><ProductImageUpload key={product?.id ?? 'new'} csrfToken={csrfToken} initial={images} onChange={setImages} />{fieldError('imageIds')}</div>
       </div></fieldset>
       {!isLaptop && <fieldset className="live-accessory-specs"><legend>{productTypeLabel} specifications</legend><p>Enter the specifications that apply to this product type.</p><div className="live-form-grid">
         {accessorySpecs[productType].map(field => <label key={field.key}>{field.label}

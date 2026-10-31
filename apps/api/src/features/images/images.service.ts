@@ -79,10 +79,11 @@ function sniffImage(bytes: Buffer): { extension: string; contentType: string } |
 }
 
 function isJpeg(bytes: Buffer): boolean {
-  if (bytes.length < 16 || bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes.at(-2) !== 0xff || bytes.at(-1) !== 0xd9) return false;
+  if (bytes.length < 16 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return false;
   let hasFrame = false;
   let hasScan = false;
-  for (let offset = 2; offset + 4 < bytes.length - 2;) {
+  let offset = 2;
+  while (offset + 4 < bytes.length) {
     if (bytes[offset] !== 0xff) return false;
     while (bytes[offset] === 0xff) offset++;
     const marker = bytes[offset++];
@@ -95,7 +96,9 @@ function isJpeg(bytes: Buffer): boolean {
     if ([0xc0,0xc1,0xc2,0xc3,0xc5,0xc6,0xc7,0xc9,0xca,0xcb,0xcd,0xce,0xcf].includes(marker)) hasFrame = true;
     offset += length;
   }
-  return hasFrame && hasScan;
+  // Encoders such as WhatsApp append metadata after the end-of-image marker,
+  // so require EOI after the scan rather than at the last two bytes.
+  return hasFrame && hasScan && bytes.lastIndexOf(Buffer.from([0xff, 0xd9])) > offset;
 }
 
 function isPng(bytes: Buffer): boolean {

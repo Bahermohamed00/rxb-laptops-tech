@@ -102,7 +102,7 @@ test('health, admin sessions, authorization, CORS, environment, and login limits
     assert.match(cookie, /^rxb_admin_session=/);
     assert.match(cookie, /HttpOnly/i);
     assert.match(cookie, /SameSite=Lax/i);
-    assert.match(cookie, /Path=\/api\/auth/i);
+    assert.match(cookie, /Path=\/api;/i);
     assert.doesNotMatch(cookie, /Secure/i, 'test mode is not production');
     const token = cookie.split(';')[0].split('=').slice(1).join('=');
     assert.equal([...sessions.values()].at(-1).tokenHash, createHash('sha256').update(token).digest('hex'));

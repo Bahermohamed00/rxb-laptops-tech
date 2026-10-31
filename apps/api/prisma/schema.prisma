@@ -118,7 +118,7 @@ model Product {
   ramOptions     ProductRamOption[]
   storageOptions ProductStorageOption[]
   combinations   ProductUpgradeCombination[]
-  image          ProductImage?
+  images         ProductImage[]
   inventoryAdjustments InventoryAdjustment[]
 
   @@index([status, condition, createdAt])
@@ -172,13 +172,15 @@ model ProductUpgradeCombination {
 
 model ProductImage {
   id           String   @id @default(uuid()) @db.Uuid
-  productId    String?  @unique @db.Uuid
+  productId    String?  @db.Uuid
+  position     Int      @default(0)
   storageKey   String   @unique @db.VarChar(100)
   contentType  String   @db.VarChar(32)
   byteSize     Int
   createdAt    DateTime @default(now()) @db.Timestamptz(3)
   product      Product? @relation(fields: [productId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
+  @@index([productId, position])
   @@index([createdAt])
 }
 

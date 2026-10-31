@@ -38,7 +38,7 @@ const product = {
   ], combinations: [
     { productId: '9c490877-4e17-4f25-99da-a104c0803af1', ramCapacityGB: 16, ramType: 'DDR5', storageCapacityGB: 512, storageType: 'NVME', isAvailable: true },
     { productId: '9c490877-4e17-4f25-99da-a104c0803af1', ramCapacityGB: 32, ramType: 'DDR5', storageCapacityGB: 1024, storageType: 'NVME', isAvailable: true },
-  ], image: { id: 'ed6de2f1-df48-457c-9436-c2438ce37f61', productId: '9c490877-4e17-4f25-99da-a104c0803af1', storageKey: 'private-key.webp', contentType: 'image/webp', byteSize: 123, createdAt: new Date() },
+  ], images: [{ id: 'ed6de2f1-df48-457c-9436-c2438ce37f61', productId: '9c490877-4e17-4f25-99da-a104c0803af1', position: 0, storageKey: 'private-key.webp', contentType: 'image/webp', byteSize: 123, createdAt: new Date() }],
 };
 
 test('product API publishes safe catalog fields and calculates prices from compatible options', async t => {
@@ -72,7 +72,8 @@ test('product API publishes safe catalog fields and calculates prices from compa
   assert.equal(publicProducts.length, 1);
   assert.equal('stockQuantity' in publicProducts[0], false);
   assert.equal('storageKey' in publicProducts[0], false);
-  assert.equal(publicProducts[0].imageUrl, `/api/public/images/${product.image.id}`);
+  assert.equal(publicProducts[0].imageUrl, `/api/public/images/${product.images[0].id}`);
+  assert.deepEqual(publicProducts[0].imageUrls, [`/api/public/images/${product.images[0].id}`]);
   assert.deepEqual(publicProducts[0].ramOptions.map(option => option.capacityGB), [16, 32]);
   assert.deepEqual(publicProducts[0].combinations, [
     { ramOptionId: product.ramOptions[0].id, storageOptionId: product.storageOptions[0].id },
@@ -145,7 +146,7 @@ test('valid product creation persists one laptop record and product-scoped upgra
   const tx = {
     product: {
       create: async ({ data }) => { persisted = data; return { id: product.id }; },
-      findUniqueOrThrow: async () => ({ ...product, ...persisted, image: null, ramOptions: persisted.ramOptions.create, storageOptions: persisted.storageOptions.create, combinations: [{ ramCapacityGB: 16, ramType: 'DDR5', storageCapacityGB: 512, storageType: 'NVME', isAvailable: true }] }),
+      findUniqueOrThrow: async () => ({ ...product, ...persisted, images: [], ramOptions: persisted.ramOptions.create, storageOptions: persisted.storageOptions.create, combinations: [{ ramCapacityGB: 16, ramType: 'DDR5', storageCapacityGB: 512, storageType: 'NVME', isAvailable: true }] }),
     },
     productUpgradeCombination: { createMany: async ({ data }) => { persisted.combinations = data; } },
   };
@@ -172,7 +173,7 @@ test('accessory products persist their type-specific specs without laptop-only f
   const tx = {
     product: {
       create: async ({ data }) => { persisted = data; return { id: product.id }; },
-      findUniqueOrThrow: async () => ({ ...product, ...persisted, image: null, ramOptions: [], storageOptions: [], combinations: [] }),
+      findUniqueOrThrow: async () => ({ ...product, ...persisted, images: [], ramOptions: [], storageOptions: [], combinations: [] }),
     },
   };
   const service = new ProductsService({ $transaction: callback => callback(tx) }, {});
@@ -209,7 +210,7 @@ test('accessory public listings expose their product type and listed price witho
     ...product, slug: 'rxb-keyboard', productType: 'KEYBOARD', brand: 'RXB', model: 'Mechanical Keyboard',
     specs: { keyboardType: 'Mechanical', connection: 'Wired', layout: 'EN+AR', backlight: 'RGB' },
     cpu: null, gpu: null, baseRamGB: null, baseRamType: null, baseStorageGB: null, baseStorageType: null,
-    useCase: null, stockQuantity: 0, image: null, ramOptions: [], storageOptions: [], combinations: [],
+    useCase: null, stockQuantity: 0, images: [], ramOptions: [], storageOptions: [], combinations: [],
   };
   const service = new ProductsService({ product: { findMany: async () => [accessory] } }, {});
   const [listed] = await service.publicList();
@@ -232,7 +233,7 @@ test('accessory product quotes are rejected instead of applying laptop upgrade p
 
 test('product edits replace supported options and compatible pairs in one transaction', async () => {
   const calls = [];
-  const updated = { ...product, slug: 'updated-laptop', image: null };
+  const updated = { ...product, slug: 'updated-laptop', images: [] };
   const tx = {
     productUpgradeCombination: { deleteMany: async () => { calls.push('delete-combinations'); }, createMany: async ({ data }) => { calls.push(['create-combinations', data]); } },
     productRamOption: { deleteMany: async () => { calls.push('delete-ram'); } },
@@ -244,7 +245,7 @@ test('product edits replace supported options and compatible pairs in one transa
     },
   };
   const prisma = {
-    product: { findUnique: async () => ({ ...product, ramOptions: product.ramOptions, storageOptions: product.storageOptions, combinations: product.combinations, image: null }) },
+    product: { findUnique: async () => ({ ...product, ramOptions: product.ramOptions, storageOptions: product.storageOptions, combinations: product.combinations, images: [] }) },
     $transaction: callback => callback(tx),
   };
   const service = new ProductsService(prisma, { deleteUnattached: async () => {} });
@@ -259,6 +260,43 @@ test('product edits replace supported options and compatible pairs in one transa
   assert.equal(result.slug, 'updated-laptop');
   assert.deepEqual(calls.slice(0, 3), ['delete-combinations', 'delete-ram', 'delete-storage']);
   assert.deepEqual(calls[3], ['create-combinations', [{ productId: product.id, ramCapacityGB: 16, ramType: 'DDR5', storageCapacityGB: 512, storageType: 'NVME', isAvailable: true }]]);
+});
+
+test('product edits attach the gallery in order and remove images dropped from it', async () => {
+  const [kept, added, dropped] = ['0b7f4c1e-6f0a-4a43-9d55-1f6b0f5d2a01', '0b7f4c1e-6f0a-4a43-9d55-1f6b0f5d2a02', '0b7f4c1e-6f0a-4a43-9d55-1f6b0f5d2a03'];
+  const image = (id, productId) => ({ id, productId, position: 0, storageKey: `${id}.jpg`, contentType: 'image/jpeg', byteSize: 10, createdAt: new Date() });
+  const attached = [];
+  const deleted = [];
+  const tx = {
+    productUpgradeCombination: { deleteMany: async () => {}, createMany: async () => {} },
+    productRamOption: { deleteMany: async () => {} },
+    productStorageOption: { deleteMany: async () => {} },
+    productImage: { updateMany: async ({ where, data }) => { if (where.id) attached.push([where.id, data.position]); return { count: 1 }; } },
+    product: {
+      findUniqueOrThrow: async () => ({ ...product, images: [image(added, product.id), image(kept, product.id)] }),
+      update: async () => product,
+    },
+  };
+  const prisma = {
+    product: { findUnique: async () => ({ ...product, images: [image(kept, product.id), image(dropped, product.id)] }) },
+    productImage: { findMany: async () => [image(added, null), image(kept, product.id)] },
+    $transaction: callback => callback(tx),
+  };
+  const service = new ProductsService(prisma, { deleteUnattached: async id => { deleted.push(id); } });
+  const input = {
+    slug: product.slug, brand: product.brand, model: product.model, condition: 'NEW', status: 'ACTIVE', priceMinor: product.priceMinor,
+    cpu: product.cpu, gpu: product.gpu, baseRamGB: 16, baseRamType: 'DDR5', baseStorageGB: 512, baseStorageType: 'NVME', stockQuantity: 1,
+    imageIds: [added, kept],
+    ramOptions: [{ capacityGB: 16, type: 'DDR5', priceDeltaMinor: 0, isBase: true, isAvailable: true }],
+    storageOptions: [{ capacityGB: 512, type: 'NVME', priceDeltaMinor: 0, isBase: true, isAvailable: true }],
+    combinations: [{ ramCapacityGB: 16, ramType: 'DDR5', storageCapacityGB: 512, storageType: 'NVME', isAvailable: true }],
+  };
+  const result = await service.update(product.id, input);
+  assert.deepEqual(attached, [[added, 0], [kept, 1]]);
+  assert.deepEqual(deleted, [dropped]);
+  assert.equal(result.image.id, added);
+  assert.deepEqual(result.images.map(item => item.id), [added, kept]);
+  await assert.rejects(service.update(product.id, { ...input, imageIds: [kept, kept] }), { response: { message: 'Each product image can only be used once.', fieldErrors: { imageIds: 'Remove the duplicated image.' } } });
 });
 
 test('product deletion strategy archives the record instead of removing its history', async () => {

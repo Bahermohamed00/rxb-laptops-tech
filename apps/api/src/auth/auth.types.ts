@@ -17,4 +17,4 @@ export interface AuthenticatedRequest extends Request {
 }
 
 export const SESSION_COOKIE = 'rxb_admin_session';
-export const SESSION_COOKIE_PATH = '/api/auth';
+export const SESSION_COOKIE_PATH = '/api';

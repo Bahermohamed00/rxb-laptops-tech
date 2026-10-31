@@ -9,12 +9,12 @@ export type ApiProduct = {
   status: 'DRAFT'|'ACTIVE'|'ARCHIVED'; currency: string; priceMinor: number; cpu: string|null; gpu: string|null; baseRamGB: number|null; baseRamType: string|null;
   baseStorageGB: number|null; baseStorageType: string|null; displaySizeInches?: number | null; displayResolution?: string | null; displayPanel?: string | null;
   refreshRateHz?: number | null; specs: ProductSpecs; stockQuantity: number; createdAt: string; updatedAt: string;
-  image: null | { id: string; imageUrl: string }; ramOptions: RamOption[]; storageOptions: StorageOption[]; combinations: UpgradeCombination[];
+  image: null | { id: string; imageUrl: string }; images: { id: string; imageUrl: string }[]; ramOptions: RamOption[]; storageOptions: StorageOption[]; combinations: UpgradeCombination[];
 }
-export type ProductPayload = Omit<ApiProduct, 'id'|'createdAt'|'updatedAt'|'currency'|'image'|'ramOptions'|'storageOptions'|'combinations'|'cpu'|'gpu'|'baseRamGB'|'baseRamType'|'baseStorageGB'|'baseStorageType'> & {
+export type ProductPayload = Omit<ApiProduct, 'id'|'createdAt'|'updatedAt'|'currency'|'image'|'images'|'ramOptions'|'storageOptions'|'combinations'|'cpu'|'gpu'|'baseRamGB'|'baseRamType'|'baseStorageGB'|'baseStorageType'> & {
   cpu?: string; gpu?: string; baseRamGB?: number; baseRamType?: string;
   baseStorageGB?: number; baseStorageType?: string;
-  specs: ProductSpecs; imageId?: string; ramOptions: RamOption[]; storageOptions: StorageOption[]; combinations: UpgradeCombination[];
+  specs: ProductSpecs; imageId?: string; imageIds?: string[]; ramOptions: RamOption[]; storageOptions: StorageOption[]; combinations: UpgradeCombination[];
 }
 export type ProductSearch = {
   q?: string; productType?: ProductType; condition?: ApiProduct['condition']; status?: ApiProduct['status']; useCase?: 'WORK'|'STUDY'|'GAMING'|'UNCATEGORIZED';

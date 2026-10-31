@@ -5,7 +5,10 @@ import { ProductSearchDto } from './products.dto.js';
 import type { ProductDto, UpdateInventoryDto } from './products.dto.js';
 import { ImagesService } from '../images/images.service.js';
 
-const include = { ramOptions: true, storageOptions: true, combinations: true, image: true } as const;
+const include = {
+  ramOptions: true, storageOptions: true, combinations: true,
+  images: { orderBy: [{ position: 'asc' }, { createdAt: 'asc' }] },
+} satisfies Prisma.ProductInclude;
 type ProductWithRelations = Prisma.ProductGetPayload<{ include: typeof include }>;
 
 function invalidProduct(message: string, fieldErrors: Record<string, string>): never {
@@ -159,16 +162,29 @@ export class ProductsService {
     return normalized;
   }
 
-  private async checkedImage(imageId?: string, currentProductId?: string) {
-    if (!imageId) return undefined;
-    const image = await this.prisma.productImage.findUnique({ where: { id: imageId } });
-    if (!image || (image.productId && image.productId !== currentProductId)) invalidProduct('The selected product image is unavailable.', { imageId: 'Upload a JPEG, PNG, or WebP image and select it again.' });
-    return image.id;
+  // `imageIds` is the ordered gallery; the legacy single `imageId` is accepted
+  // when no gallery is sent. The first image is the product's main image.
+  private async checkedImages(input: ProductDto, currentProductId?: string): Promise<string[]> {
+    const imageIds = input.imageIds ?? (input.imageId ? [input.imageId] : []);
+    if (new Set(imageIds).size !== imageIds.length) invalidProduct('Each product image can only be used once.', { imageIds: 'Remove the duplicated image.' });
+    if (!imageIds.length) return [];
+    const images = await this.prisma.productImage.findMany({ where: { id: { in: imageIds } } });
+    if (images.length !== imageIds.length || images.some(image => image.productId && image.productId !== currentProductId)) {
+      invalidProduct('A selected product image is unavailable.', { imageIds: 'Upload a JPEG, PNG, or WebP image and select it again.' });
+    }
+    return imageIds;
+  }
+
+  private async attachImages(tx: Prisma.TransactionClient, productId: string, imageIds: string[]) {
+    for (const [position, id] of imageIds.entries()) {
+      const attached = await tx.productImage.updateMany({ where: { id, productId: null }, data: { productId, position } });
+      if (attached.count !== 1) throw new ConflictException('A selected product image is already attached elsewhere.');
+    }
   }
 
   async create(input: ProductDto) {
     const specs = this.validateOptions(input);
-    const imageId = await this.checkedImage(input.imageId);
+    const imageIds = await this.checkedImages(input);
     const productType = input.productType ?? 'LAPTOP';
     const laptop = productType === 'LAPTOP';
     const ramOptions = input.ramOptions ?? [];
@@ -191,10 +207,7 @@ export class ProductsService {
           storageOptions: { create: storageOptions.map(({ id: _id, ...option }) => option) },
         }, include });
         if (combinations.length) await tx.productUpgradeCombination.createMany({ data: combinations.map(combination => ({ ...combination, productId: created.id })) });
-        if (imageId) {
-          const attached = await tx.productImage.updateMany({ where: { id: imageId, productId: null }, data: { productId: created.id } });
-          if (attached.count !== 1) throw new ConflictException('The selected product image is already attached elsewhere.');
-        }
+        await this.attachImages(tx, created.id, imageIds);
         return tx.product.findUniqueOrThrow({ where: { id: created.id }, include });
       });
       return this.adminProduct(product);
@@ -208,7 +221,7 @@ export class ProductsService {
     const specs = this.validateOptions(input);
     const existing = await this.prisma.product.findUnique({ where: { id }, include });
     if (!existing) throw new NotFoundException('Product not found.');
-    const imageId = await this.checkedImage(input.imageId, id);
+    const imageIds = await this.checkedImages(input, id);
     const productType = input.productType ?? 'LAPTOP';
     const laptop = productType === 'LAPTOP';
     const ramOptions = input.ramOptions ?? [];
@@ -219,11 +232,8 @@ export class ProductsService {
         await tx.productUpgradeCombination.deleteMany({ where: { productId: id } });
         await tx.productRamOption.deleteMany({ where: { productId: id } });
         await tx.productStorageOption.deleteMany({ where: { productId: id } });
-        await tx.productImage.updateMany({ where: { productId: id }, data: { productId: null } });
-        if (imageId) {
-          const attached = await tx.productImage.updateMany({ where: { id: imageId, productId: null }, data: { productId: id } });
-          if (attached.count !== 1) throw new ConflictException('The selected product image is already attached elsewhere.');
-        }
+        await tx.productImage.updateMany({ where: { productId: id }, data: { productId: null, position: 0 } });
+        await this.attachImages(tx, id, imageIds);
         const product = await tx.product.update({ where: { id }, data: {
           slug: input.slug.trim().toLowerCase(), productType, brand: input.brand.trim(), model: input.model.trim(), description: input.description?.trim() ?? '',
           condition: input.condition, conditionNotes: input.conditionNotes?.trim(), useCase: laptop ? input.useCase ?? null : null, status: input.status, priceMinor: input.priceMinor,
@@ -240,7 +250,9 @@ export class ProductsService {
         if (combinations.length) await tx.productUpgradeCombination.createMany({ data: combinations.map(combination => ({ ...combination, productId: id })) });
         return this.adminProduct(await tx.product.findUniqueOrThrow({ where: { id }, include }));
       });
-      if (existing.image && existing.image.id !== imageId) await this.images.deleteUnattached(existing.image.id).catch(() => undefined);
+      for (const image of existing.images) {
+        if (!imageIds.includes(image.id)) await this.images.deleteUnattached(image.id).catch(() => undefined);
+      }
       return updated;
     } catch (error) {
       if (isUniqueError(error)) throw uniqueConflict(error);
@@ -346,8 +358,9 @@ export class ProductsService {
   }
 
   private adminProduct(product: ProductWithRelations) {
-    const { image, ...fields } = product;
-    return { ...fields, image: image ? { id: image.id, contentType: image.contentType, byteSize: image.byteSize, imageUrl: `/api/public/images/${image.id}` } : null };
+    const { images: records, ...fields } = product;
+    const images = records.map(image => ({ id: image.id, contentType: image.contentType, byteSize: image.byteSize, imageUrl: `/api/public/images/${image.id}` }));
+    return { ...fields, image: images[0] ?? null, images };
   }
 
   private publicProduct(product: ProductWithRelations) {
@@ -363,7 +376,8 @@ export class ProductsService {
       cpu: product.cpu, gpu: product.gpu, baseRamGB: product.baseRamGB, baseRamType: product.baseRamType,
       baseStorageGB: product.baseStorageGB, baseStorageType: product.baseStorageType, displaySizeInches: product.displaySizeInches,
       displayResolution: product.displayResolution, displayPanel: product.displayPanel, refreshRateHz: product.refreshRateHz,
-      available: product.stockQuantity > 0, imageUrl: product.image ? `/api/public/images/${product.image.id}` : null,
+      available: product.stockQuantity > 0, imageUrl: product.images[0] ? `/api/public/images/${product.images[0].id}` : null,
+      imageUrls: product.images.map(image => `/api/public/images/${image.id}`),
       ramOptions: product.ramOptions.filter(option => ramIds.has(option.id)).map(({ id, capacityGB, type, priceDeltaMinor, isBase }) => ({ id, capacityGB, type, priceDeltaMinor, isBase })),
       storageOptions: product.storageOptions.filter(option => storageIds.has(option.id)).map(({ id, capacityGB, type, priceDeltaMinor, isBase }) => ({ id, capacityGB, type, priceDeltaMinor, isBase })),
       combinations: compatible.flatMap(combination => {
