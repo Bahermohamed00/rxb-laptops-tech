@@ -29,7 +29,7 @@ function payloadForStatus(product: ApiProduct, status: 'DRAFT' | 'ACTIVE'): Prod
       refreshRateHz: product.refreshRateHz ?? undefined,
     } : {}),
     stockQuantity: product.stockQuantity,
-    ...(product.image ? { imageId: product.image.id } : {}),
+    imageIds: product.images.map(image => image.id),
     ramOptions: laptop ? product.ramOptions.map(({ id: _id, ...option }) => option) : [],
     storageOptions: laptop ? product.storageOptions.map(({ id: _id, ...option }) => option) : [],
     combinations: laptop ? product.combinations : [],

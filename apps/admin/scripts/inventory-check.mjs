@@ -24,7 +24,7 @@ const makeProduct = (id, brand, model, stockQuantity, status = 'ACTIVE') => ({
   id, slug: `${brand}-${model}`.toLowerCase().replaceAll(' ', '-'), productType: 'LAPTOP', brand, model, description: 'Synthetic fixture', condition: 'NEW', conditionNotes: null,
   status, currency: 'EGP', priceMinor: 7990000, cpu: 'Test CPU', gpu: 'Test GPU', baseRamGB: 16, baseRamType: 'DDR5', baseStorageGB: 1024,
   baseStorageType: 'NVME', displaySizeInches: 14, displayResolution: null, displayPanel: null, refreshRateHz: null, stockQuantity,
-  createdAt: stamp, updatedAt: stamp, image: null, specs: {}, ramOptions: [], storageOptions: [], combinations: [],
+  createdAt: stamp, updatedAt: stamp, image: null, images: [], specs: {}, ramOptions: [], storageOptions: [], combinations: [],
 })
 const fixtures = [
   makeProduct('a6f9de80-86b4-4d04-948b-442a3f8b4001', 'ASUS', 'Test G14', 3),

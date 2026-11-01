@@ -15,7 +15,7 @@ export default function IntroScreen({ onComplete, theme, onToggleTheme }: IntroS
 
   return <div className="intro" role="dialog" aria-label="RXB intro">
     <div className="intro-grid" /><div className="intro-blue intro-blue-left" /><div className="intro-blue intro-blue-right" />
-    <div className="intro-top"><span>RXB / SYSTEMS</span><div className="intro-status"><span>INITIALIZING <i /></span><ThemeToggle theme={theme} onToggle={onToggleTheme} /></div></div>
+    <div className="intro-top"><span className="intro-label">RXB / SYSTEM INITIALIZATION</span><div className="intro-status"><span>INITIALIZING <i /></span><ThemeToggle theme={theme} onToggle={onToggleTheme} /></div></div>
     <div className="intro-center"><span className="intro-overline">A NEW STANDARD IN PERSONAL TECH</span><LogoAssembly /><p>POWER YOUR NEXT MOVE</p><div className="loader"><span /></div></div>
     <div className="intro-bottom"><span>SELECTED WITH INTENTION</span><button type="button" aria-label="Skip RXB introduction" onClick={onComplete}>SKIP INTRO <span aria-hidden="true">↗</span></button><span>001 — 003</span></div>
     <div className="intro-scanline" />

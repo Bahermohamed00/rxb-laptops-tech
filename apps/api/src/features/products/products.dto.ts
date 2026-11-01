@@ -52,6 +52,7 @@ export class ProductDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(1000) refreshRateHz?: number;
   @Type(() => Number) @IsInt() @Min(0) @Max(1_000_000) stockQuantity!: number;
   @IsOptional() @IsUUID() imageId?: string;
+  @IsOptional() @IsArray() @ArrayMaxSize(12) @IsUUID(undefined, { each: true }) imageIds?: string[];
   @IsOptional() @IsArray() @ArrayMaxSize(100) @ValidateNested({ each: true }) @Type(() => RamOptionDto) ramOptions: RamOptionDto[] = [];
   @IsOptional() @IsArray() @ArrayMaxSize(100) @ValidateNested({ each: true }) @Type(() => StorageOptionDto) storageOptions: StorageOptionDto[] = [];
   @IsOptional() @IsArray() @ArrayMaxSize(10_000) @ValidateNested({ each: true }) @Type(() => UpgradeCombinationDto) combinations: UpgradeCombinationDto[] = [];

@@ -7,7 +7,7 @@ export type StoreProduct = {
   useCase: 'WORK'|'STUDY'|'GAMING'|null;
   currency: string; priceMinor: number; cpu: string | null; gpu: string | null; baseRamGB: number | null; baseRamType: string | null; baseStorageGB: number | null;
   baseStorageType: string | null; displaySizeInches: number | null; displayResolution: string | null; displayPanel: string | null; refreshRateHz: number | null;
-  specs: StoreProductSpecs; available: boolean; imageUrl: string | null; ramOptions: PublicOption[]; storageOptions: PublicOption[]; combinations: PublicCombination[];
+  specs: StoreProductSpecs; available: boolean; imageUrl: string | null; imageUrls?: string[]; ramOptions: PublicOption[]; storageOptions: PublicOption[]; combinations: PublicCombination[];
 }
 
 export const apiBase = (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:5185/api').replace(/\/$/, '')

@@ -18,7 +18,7 @@ export function installAdminSessionMock({ products: productFixtures = [] } = {})
       const created = {
         ...createdPayload, id: 'a6f9de80-86b4-4d04-948b-442a3f8b4004', currency: 'EGP', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
         cpu: null, gpu: null, baseRamGB: null, baseRamType: null, baseStorageGB: null, baseStorageType: null,
-        displaySizeInches: null, displayResolution: null, displayPanel: null, refreshRateHz: null, image: null,
+        displaySizeInches: null, displayResolution: null, displayPanel: null, refreshRateHz: null, image: null, images: [],
         ramOptions: [], storageOptions: [], combinations: [],
       }
       return new Response(JSON.stringify(created), { status: 201, headers: { 'Content-Type': 'application/json' } })

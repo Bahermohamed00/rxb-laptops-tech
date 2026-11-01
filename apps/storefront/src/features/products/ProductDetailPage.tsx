@@ -1,11 +1,16 @@
 import { useEffect, useState } from 'react'
-import { fetchProductDetail, fetchQuote, imageSource, type StoreProduct } from './products.api'
+import { fetchProductDetail, fetchQuote, type PublicOption, type StoreProduct } from './products.api'
 import { productInquiryMessage, whatsappUrl } from '../../config/business-contact'
-import { ThemeToggle } from '../../components/ThemeToggle'
-import type { Theme } from '../../theme/useTheme'
+import { CpuIcon, GpuIcon, LaptopIcon, MouseIcon, WhatsAppIcon } from '../../components/icons'
+import { formatEgp } from '../home/catalog'
+import { ProductGallery } from './ProductGallery'
+import './product-detail.css'
 
-const formatMoney = (minor: number, currency: string) => (minor / 100).toLocaleString('en-EG', { style: 'currency', currency })
-const deltaLabel = (minor: number, currency: string) => minor === 0 ? 'Included' : `${minor > 0 ? '+' : '−'}${formatMoney(Math.abs(minor), currency)}`
+const deltaLabel = (minor: number, currency: string) => minor === 0 ? 'Included' : `${minor > 0 ? '+' : '−'} ${formatEgp(Math.abs(minor), currency)}`
+const storageLabel = (gb: number) => gb >= 1000 && gb % 1000 === 0 ? `${gb / 1000} TB` : `${gb} GB`
+const optionLabel = (kind: 'ram' | 'storage', option: PublicOption) => `${kind === 'storage' ? storageLabel(option.capacityGB) : `${option.capacityGB} GB`} ${option.type}`
+const MemoryGlyph = () => <svg className="pd-option-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8h18v8H3zM7 8v8M11 8v8M15 8v8M19 8v8M6 16v2M10 16v2M14 16v2M18 16v2" /></svg>
+const DriveGlyph = () => <svg className="pd-option-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v10H4zM7.5 12h6M17 12h.01" /></svg>
 const accessorySpecLabels: Record<string, string> = {
   keyboardType: 'Keyboard type',
   connection: 'Connection',
@@ -20,7 +25,7 @@ const accessorySpecLabels: Record<string, string> = {
   additionalNotes: 'Additional notes',
 }
 
-export function ProductDetailPage({ product, onClose, theme, onToggleTheme }: { product: StoreProduct; onClose: () => void; theme: Theme; onToggleTheme: () => void }) {
+export function ProductDetailPage({ product, onClose }: { product: StoreProduct; onClose: () => void }) {
   const baseRam = product.ramOptions.find(option => option.isBase) ?? product.ramOptions[0]
   const baseStorage = product.storageOptions.find(option => option.isBase) ?? product.storageOptions[0]
   const [ramId, setRamId] = useState(baseRam?.id ?? '')
@@ -32,7 +37,7 @@ export function ProductDetailPage({ product, onClose, theme, onToggleTheme }: { 
   const [detailsLoading, setDetailsLoading] = useState(true)
   const [detailsError, setDetailsError] = useState('')
   const [retry, setRetry] = useState(0)
-  const [imageFailed, setImageFailed] = useState(false)
+  const [adjustment, setAdjustment] = useState('')
 
   useEffect(() => {
     let active = true
@@ -43,29 +48,54 @@ export function ProductDetailPage({ product, onClose, theme, onToggleTheme }: { 
 
   useEffect(() => {
     if (!details) return
-    setRamId(details.ramOptions.find(option => option.isBase)?.id ?? details.ramOptions[0]?.id ?? '')
-    setStorageId(details.storageOptions.find(option => option.isBase)?.id ?? details.storageOptions[0]?.id ?? '')
+    const baseRamId = details.ramOptions.find(option => option.isBase)?.id ?? details.ramOptions[0]?.id ?? ''
+    const baseStorageId = details.storageOptions.find(option => option.isBase)?.id ?? details.storageOptions[0]?.id ?? ''
+    // Start from the base pair; fall back to the first offered pair if the base pair is not offered.
+    const start = details.combinations.some(pair => pair.ramOptionId === baseRamId && pair.storageOptionId === baseStorageId)
+      ? { ramOptionId: baseRamId, storageOptionId: baseStorageId }
+      : details.combinations[0] ?? { ramOptionId: baseRamId, storageOptionId: baseStorageId }
+    setRamId(start.ramOptionId)
+    setStorageId(start.storageOptionId)
+    setAdjustment('')
   }, [details])
 
-  const compatibleStorageIds = details?.combinations.filter(pair => pair.ramOptionId === ramId).map(pair => pair.storageOptionId) ?? []
-  const compatibleRamIds = details?.combinations.filter(pair => pair.storageOptionId === storageId).map(pair => pair.ramOptionId) ?? []
-  function selectRam(nextRamId: string) {
+  const isOffered = (nextRamId: string, nextStorageId: string) => Boolean(details?.combinations.some(pair => pair.ramOptionId === nextRamId && pair.storageOptionId === nextStorageId))
+  /** Options of the other specification that are offered together with `id`. */
+  function partnersOf(kind: 'ram' | 'storage', id: string) {
+    const pairs = details?.combinations ?? []
+    return kind === 'ram' ? pairs.filter(pair => pair.ramOptionId === id).map(pair => pair.storageOptionId) : pairs.filter(pair => pair.storageOptionId === id).map(pair => pair.ramOptionId)
+  }
+  /**
+   * The partner that selecting `id` would leave in place: the current one when it is still offered, otherwise the
+   * offered partner closest in capacity to the current one, then the cheaper upgrade.
+   */
+  function resolvePartner(kind: 'ram' | 'storage', id: string): PublicOption | undefined {
+    const partnerOptions = (kind === 'ram' ? details?.storageOptions : details?.ramOptions) ?? []
+    const currentPartner = partnerOptions.find(option => option.id === (kind === 'ram' ? storageId : ramId))
+    const candidates = partnersOf(kind, id).map(partnerId => partnerOptions.find(option => option.id === partnerId)).filter((option): option is PublicOption => Boolean(option))
+    if (currentPartner && candidates.some(option => option.id === currentPartner.id)) return currentPartner
+    const reference = currentPartner?.capacityGB ?? 0
+    return [...candidates].sort((a, b) => Math.abs(a.capacityGB - reference) - Math.abs(b.capacityGB - reference) || a.priceDeltaMinor - b.priceDeltaMinor)[0]
+  }
+  function select(kind: 'ram' | 'storage', id: string) {
+    const options = (kind === 'ram' ? details?.ramOptions : details?.storageOptions) ?? []
+    const chosen = options.find(option => option.id === id)
+    const partner = resolvePartner(kind, id)
+    if (!chosen || !partner) return
+    const previousPartnerId = kind === 'ram' ? storageId : ramId
+    const nextRamId = kind === 'ram' ? id : partner.id
+    const nextStorageId = kind === 'ram' ? partner.id : id
+    if (!isOffered(nextRamId, nextStorageId)) return
+    // Both ids change in one render, so the quote request only ever sees the final, offered pair.
     setRamId(nextRamId)
-    const nextStorageIds = details?.combinations.filter(pair => pair.ramOptionId === nextRamId).map(pair => pair.storageOptionId) ?? []
-    if (!nextStorageIds.includes(storageId)) {
-      const nextPair = details?.combinations.find(pair => pair.ramOptionId === nextRamId)
-      if (nextPair) setStorageId(nextPair.storageOptionId)
-    }
-  }
-  function selectStorage(nextStorageId: string) {
     setStorageId(nextStorageId)
-    const nextRamIds = details?.combinations.filter(pair => pair.storageOptionId === nextStorageId).map(pair => pair.ramOptionId) ?? []
-    if (!nextRamIds.includes(ramId)) {
-      const nextPair = details?.combinations.find(pair => pair.storageOptionId === nextStorageId)
-      if (nextPair) setRamId(nextPair.ramOptionId)
-    }
+    if (partner.id === previousPartnerId) { setAdjustment(''); return }
+    const otherKind = kind === 'ram' ? 'storage' : 'ram'
+    const previousPartner = (kind === 'ram' ? details?.storageOptions : details?.ramOptions)?.find(option => option.id === previousPartnerId)
+    setAdjustment(`${otherKind === 'ram' ? 'Memory' : 'Storage'} changed to ${optionLabel(otherKind, partner)}${previousPartner ? ` — ${optionLabel(kind, chosen)} ${kind === 'ram' ? 'RAM' : 'storage'} isn’t offered with ${optionLabel(otherKind, previousPartner)}` : ''}.`)
   }
-
+  const compatibleRamIds = partnersOf('storage', storageId)
+  const compatibleStorageIds = partnersOf('ram', ramId)
   useEffect(() => {
     if (!details || details.productType !== 'LAPTOP') {
       setQuote(null)
@@ -73,7 +103,8 @@ export function ProductDetailPage({ product, onClose, theme, onToggleTheme }: { 
       setError('')
       return
     }
-    if (!ramId || !storageId) { setQuote(null); return }
+    // Never ask the server to price a pair that is not offered.
+    if (!ramId || !storageId || !isOffered(ramId, storageId)) { setQuote(null); setLoading(false); return }
     let active = true
     setLoading(true); setError(''); setQuote(null)
     void fetchQuote(details, ramId, storageId).then(value => { if (active) setQuote(value) }).catch(cause => { if (active) setError(cause instanceof Error ? cause.message : 'Price could not be confirmed.') }).finally(() => { if (active) setLoading(false) })
@@ -81,6 +112,7 @@ export function ProductDetailPage({ product, onClose, theme, onToggleTheme }: { 
   }, [details, ramId, storageId])
 
   const shownProduct = details ?? product
+  const gallery = shownProduct.imageUrls?.length ? shownProduct.imageUrls : shownProduct.imageUrl ? [shownProduct.imageUrl] : []
   const isLaptop = shownProduct.productType === 'LAPTOP'
   const selectedRam = details?.ramOptions.find(option => option.id === ramId)
   const selectedStorage = details?.storageOptions.find(option => option.id === storageId)
@@ -101,76 +133,156 @@ export function ProductDetailPage({ product, onClose, theme, onToggleTheme }: { 
       inquiryPrice.priceMinor,
     ))
     : ''
-  const specifications = [
-    ['Product type', productTypeLabel],
-    ['Brand', shownProduct.brand],
-    ['Model', shownProduct.model],
-    ['Condition', shownProduct.condition === 'NEW' ? 'New' : 'Pre-owned'],
-    ['Availability', shownProduct.available ? 'In stock' : 'Currently unavailable'],
+  const displaySummary = [
+    shownProduct.displaySizeInches !== null ? `${shownProduct.displaySizeInches}"` : null,
+    shownProduct.displayResolution,
+    shownProduct.displayPanel,
+    shownProduct.refreshRateHz !== null ? `${shownProduct.refreshRateHz} Hz` : null,
+  ].filter(Boolean).join(' · ')
+  const specificationGroups = ([
+    { title: 'General', rows: [
+      ['Brand', shownProduct.brand],
+      ['Model', shownProduct.model],
+      ['Product type', productTypeLabel],
+      ['Condition', shownProduct.condition === 'NEW' ? 'New' : 'Pre-owned'],
+      ['Availability', shownProduct.available ? 'In stock' : 'Currently unavailable'],
+      ['Condition notes', shownProduct.conditionNotes],
+    ] },
     ...(isLaptop ? [
-      ['Processor', shownProduct.cpu],
-      ['Graphics', shownProduct.gpu],
-      ['Base memory', shownProduct.baseRamGB !== null && shownProduct.baseRamType ? `${shownProduct.baseRamGB} GB ${shownProduct.baseRamType}` : null],
-      ['Base storage', shownProduct.baseStorageGB !== null && shownProduct.baseStorageType ? `${shownProduct.baseStorageGB} GB ${shownProduct.baseStorageType}` : null],
-      ['Display size', shownProduct.displaySizeInches !== null ? `${shownProduct.displaySizeInches} in` : null],
-      ['Resolution', shownProduct.displayResolution],
-      ['Panel', shownProduct.displayPanel],
-      ['Refresh rate', shownProduct.refreshRateHz !== null ? `${shownProduct.refreshRateHz} Hz` : null],
-    ] as [string, string | null][] : Object.entries(shownProduct.specs ?? {}).map(([key, value]) => [
-      accessorySpecLabels[key] ?? key,
-      String(value),
-    ])),
-    ['Condition notes', shownProduct.conditionNotes],
-  ].filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].length > 0)
-  return <section className="product-detail-page" aria-labelledby="product-detail-title">
-    <header className="product-detail-topbar wrap">
-      <a className="wordmark" href="/" aria-label="RXB Laptops and Tech home"><img className="wordmark-logo" src="/rxb-logo-transparent.png" alt="" /><span className="wordmark-caption">LAPTOPS <i>/</i> TECH</span></a>
-      <div className="product-detail-topbar-actions"><ThemeToggle theme={theme} onToggle={onToggleTheme} /><button type="button" onClick={onClose}>← Back to catalog</button></div>
-    </header>
-    <div className="product-detail-container wrap">
-      <p className="product-detail-breadcrumb"><a href={isLaptop ? '/#laptops' : '/#parts'} onClick={event => { event.preventDefault(); onClose() }}>{isLaptop ? 'LAPTOP CATALOG' : 'ACCESSORIES'}</a><span>/</span> PRODUCT DETAILS</p>
-      <div className="product-detail-grid">
-        <div className="product-detail-media">
-          {shownProduct.imageUrl && !imageFailed
-            ? <img src={imageSource(shownProduct.imageUrl)} alt={`${shownProduct.brand} ${shownProduct.model}`} onError={() => setImageFailed(true)} />
-            : <div className="product-image-fallback"><strong>RXB</strong><span>{shownProduct.imageUrl ? 'PRODUCT IMAGE UNAVAILABLE' : 'NO PRODUCT IMAGE PROVIDED'}</span></div>}
-          {shownProduct.description.startsWith('SAMPLE / TEST LISTING') && <span className="product-detail-sample">SAMPLE / TEST · NOT CONFIRMED INVENTORY</span>}
+      { title: 'Performance', rows: [
+        ['Processor', shownProduct.cpu],
+        ['Graphics card', shownProduct.gpu],
+        ['Memory (base)', shownProduct.baseRamGB !== null && shownProduct.baseRamType ? `${shownProduct.baseRamGB} GB ${shownProduct.baseRamType}` : null],
+        ['Storage (base)', shownProduct.baseStorageGB !== null && shownProduct.baseStorageType ? `${storageLabel(shownProduct.baseStorageGB)} ${shownProduct.baseStorageType}` : null],
+      ] },
+      { title: 'Display', rows: [
+        ['Screen size', shownProduct.displaySizeInches !== null ? `${shownProduct.displaySizeInches} in` : null],
+        ['Resolution', shownProduct.displayResolution],
+        ['Panel', shownProduct.displayPanel],
+        ['Refresh rate', shownProduct.refreshRateHz !== null ? `${shownProduct.refreshRateHz} Hz` : null],
+      ] },
+    ] : [
+      { title: 'Details', rows: Object.entries(shownProduct.specs ?? {}).map(([key, value]) => [accessorySpecLabels[key] ?? key, String(value)]) },
+    ]),
+  ] as { title: string; rows: [string, string | null][] }[])
+    .map(group => ({ title: group.title, rows: group.rows.filter((row): row is [string, string] => typeof row[1] === 'string' && row[1].length > 0) }))
+    .filter(group => group.rows.length > 0)
+  const keySpecs = (isLaptop ? [
+    { Icon: CpuIcon, label: 'Processor', value: shownProduct.cpu },
+    { Icon: GpuIcon, label: 'Graphics', value: shownProduct.gpu },
+    { Icon: LaptopIcon, label: 'Display', value: displaySummary || null },
+  ] : [
+    { Icon: MouseIcon, label: 'Type', value: productTypeLabel },
+  ]).filter(spec => spec.value)
+  const descriptionLines = shownProduct.description.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
+  const totalLabel = isLaptop
+    ? detailsLoading ? 'Loading details…' : loading ? 'Updating price…' : quote ? formatEgp(quote.priceMinor, quote.currency) : 'Price unavailable'
+    : detailsLoading ? 'Loading product…' : inquiryPrice ? formatEgp(inquiryPrice.priceMinor, inquiryPrice.currency) : 'Price unavailable'
+
+  function optionGroup(kind: 'ram' | 'storage') {
+    const options = kind === 'ram' ? shownProduct.ramOptions : shownProduct.storageOptions
+    const selected = kind === 'ram' ? ramId : storageId
+    const compatible = kind === 'ram' ? compatibleRamIds : compatibleStorageIds
+    const otherKind = kind === 'ram' ? 'storage' : 'ram'
+    const current = options.find(option => option.id === selected)
+    const locked = detailsLoading || !details || Boolean(detailsError)
+    if (!options.length) return null
+    return <fieldset className="pd-options" disabled={locked}>
+      <legend><span>{kind === 'ram' ? 'Memory (RAM)' : 'Storage'}</span>{current && <b>{optionLabel(kind, current)}</b>}</legend>
+      <div className="pd-option-grid">
+        {options.map(option => {
+          // Only options with no offered pairing at all are unavailable; others re-pair the other specification on selection.
+          const unavailable = Boolean(details && partnersOf(kind, option.id).length === 0)
+          const conflict = Boolean(details && !unavailable && !compatible.includes(option.id))
+          const switchTo = conflict ? resolvePartner(kind, option.id) : undefined
+          const checked = option.id === selected
+          return <label key={option.id} className={`pd-option${checked ? ' is-selected' : ''}${unavailable ? ' is-unavailable' : ''}${conflict ? ' is-conflict' : ''}`}>
+            <input type="radio" name={`pd-${kind}`} value={option.id} checked={checked} disabled={unavailable} onChange={() => select(kind, option.id)} />
+            <span className="pd-option-head">
+              {kind === 'ram' ? <MemoryGlyph /> : <DriveGlyph />}
+              <small className="pd-option-type">{option.type}</small>
+              <i className="pd-option-check" aria-hidden="true" />
+            </span>
+            <span className="pd-option-name">{kind === 'storage' ? storageLabel(option.capacityGB) : `${option.capacityGB} GB`}</span>
+            <span className="pd-option-delta">{unavailable ? 'Currently unavailable' : deltaLabel(option.priceDeltaMinor, shownProduct.currency)}</span>
+            {switchTo && <span className="pd-option-switch"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 5.5h9l-2.5-2.5M13 10.5H4l2.5 2.5" /></svg>Switches {otherKind === 'ram' ? 'memory' : 'storage'} to {optionLabel(otherKind, switchTo)}</span>}
+          </label>
+        })}
+      </div>
+    </fieldset>
+  }
+
+  const orderButton = whatsappHref
+    ? <a className="pd-order" href={whatsappHref} target="_blank" rel="noreferrer"><WhatsAppIcon />Order via WhatsApp</a>
+    : <button type="button" className="pd-order" disabled><WhatsAppIcon />{isLaptop ? loading ? 'Confirming configuration price…' : 'Configuration price unavailable' : 'Ordering unavailable'}</button>
+
+  return <section className="pd" aria-labelledby="product-detail-title">
+    <div className="sf-container">
+      <nav className="pd-breadcrumb" aria-label="Breadcrumb">
+        <button type="button" className="pd-back" onClick={onClose}>← Back</button>
+        <ol>
+          <li><a href="/">Home</a></li>
+          <li><a href={isLaptop ? '/laptops' : '/laptops#accessories'}>{isLaptop ? 'Laptops' : 'Accessories'}</a></li>
+          <li aria-current="page">{shownProduct.brand} {shownProduct.model}</li>
+        </ol>
+      </nav>
+
+      <div className="pd-grid">
+        <div className="pd-gallery">
+          <ProductGallery images={gallery} label={`${shownProduct.brand} ${shownProduct.model}`} sample={shownProduct.description.startsWith('SAMPLE / TEST LISTING')} />
         </div>
-        <div className="product-detail-purchase">
-          <span className="product-dialog-kicker">{productTypeLabel.toUpperCase()} · {shownProduct.condition === 'NEW' ? 'NEW' : 'PRE-OWNED'} · {shownProduct.available ? 'IN STOCK' : 'CURRENTLY UNAVAILABLE'}</span>
+
+        <div className="pd-info">
+          <div className="pd-tags">
+            <span className="pd-tag">{productTypeLabel}</span>
+            <span className="pd-tag">{shownProduct.condition === 'NEW' ? 'New' : 'Pre-owned'}</span>
+            <span className={`pd-tag pd-stock${shownProduct.available ? '' : ' is-out'}`}><i aria-hidden="true" />{shownProduct.available ? 'In stock' : 'Currently unavailable'}</span>
+          </div>
           <h1 id="product-detail-title">{shownProduct.brand} {shownProduct.model}</h1>
-          <p className="product-detail-description">{shownProduct.description || 'No product description has been provided.'}</p>
-          <div className="product-listed-price"><span>{isLaptop ? 'Listed base price' : 'Price'}</span><strong>{formatMoney(shownProduct.priceMinor, shownProduct.currency)}</strong></div>
-          {isLaptop
-            ? <div className="product-detail-configuration">
+
+          {keySpecs.length > 0 && <ul className="pd-keyspecs">
+            {keySpecs.map(({ Icon, label, value }) => <li key={label}><Icon /><span><small>{label}</small><b dir="auto">{value}</b></span></li>)}
+          </ul>}
+
+          <div className="pd-price"><span>{isLaptop ? 'Starting from' : 'Price'}</span><strong>{formatEgp(shownProduct.priceMinor, shownProduct.currency)}</strong></div>
+
+          <div className="pd-buy">
+            {isLaptop && <>
               <h2>Configure your laptop</h2>
-              <p>Only options compatible with this product are available.</p>
-              <label className="product-choice">Memory (RAM)<select disabled={detailsLoading || !details || Boolean(detailsError)} value={ramId} onChange={event => selectRam(event.target.value)}>{shownProduct.ramOptions.map(option => <option key={option.id} value={option.id} disabled={Boolean(details && !compatibleRamIds.includes(option.id))}>{option.capacityGB} GB {option.type} · {deltaLabel(option.priceDeltaMinor, shownProduct.currency)}</option>)}</select></label>
-              <label className="product-choice">Storage<select disabled={detailsLoading || !details || Boolean(detailsError)} value={storageId} onChange={event => selectStorage(event.target.value)}>{shownProduct.storageOptions.map(option => <option key={option.id} value={option.id} disabled={Boolean(details && !compatibleStorageIds.includes(option.id))}>{option.capacityGB} GB {option.type} · {deltaLabel(option.priceDeltaMinor, shownProduct.currency)}</option>)}</select></label>
-              <div className="product-quote" aria-live="polite"><span>Selected configuration total</span><strong>{detailsLoading ? 'Loading details…' : loading ? 'Updating price…' : quote ? formatMoney(quote.priceMinor, quote.currency) : 'Price unavailable'}</strong></div>
-              {detailsError && <p className="product-quote-error" role="alert">{detailsError} <button type="button" onClick={() => setRetry(value => value + 1)}>Retry</button></p>}
-              {error && <p className="product-quote-error" role="alert">{error}</p>}
-              <p className="product-dialog-note">Configuration prices are confirmed by the RXB API. An inquiry does not place an order.</p>
-              {whatsappHref
-                ? <a className="product-dialog-action product-whatsapp" href={whatsappHref} target="_blank" rel="noreferrer">Contact us on WhatsApp <span aria-hidden="true">↗</span></a>
-                : <button type="button" className="product-dialog-action product-whatsapp" disabled>{loading ? 'Confirming configuration price…' : 'Configuration price unavailable'}</button>}
-            </div>
-            : <div className="product-detail-configuration">
-              <h2>Interested in this item?</h2>
-              <p>Contact RXB about this listed product. An inquiry does not place an order.</p>
-              <div className="product-quote" aria-live="polite"><span>Listed price</span><strong>{detailsLoading ? 'Loading product…' : inquiryPrice ? formatMoney(inquiryPrice.priceMinor, inquiryPrice.currency) : 'Price unavailable'}</strong></div>
-              {detailsError && <p className="product-quote-error" role="alert">{detailsError} <button type="button" onClick={() => setRetry(value => value + 1)}>Retry</button></p>}
-              {whatsappHref
-                ? <a className="product-dialog-action product-whatsapp" href={whatsappHref} target="_blank" rel="noreferrer">Contact us on WhatsApp <span aria-hidden="true">↗</span></a>
-                : <button type="button" className="product-dialog-action product-whatsapp" disabled>Contact unavailable</button>}
-            </div>}
+              {optionGroup('ram')}
+              {optionGroup('storage')}
+              <p className="pd-adjusted" role="status">{adjustment && <><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 5.5h9l-2.5-2.5M13 10.5H4l2.5 2.5" /></svg><span key={adjustment}>{adjustment}</span></>}</p>
+              {selectedRam && selectedStorage && <p className="pd-config">
+                <span>Your configuration</span>
+                <b>{optionLabel('ram', selectedRam)} RAM</b><i aria-hidden="true">+</i><b>{optionLabel('storage', selectedStorage)} storage</b>
+              </p>}
+            </>}
+            <div className="pd-total" aria-live="polite"><span>{isLaptop ? 'Selected configuration total' : 'Listed price'}</span><strong>{totalLabel}</strong></div>
+            {detailsError && <p className="pd-error" role="alert">{detailsError} <button type="button" onClick={() => setRetry(value => value + 1)}>Retry</button></p>}
+            {error && <p className="pd-error" role="alert">{error}</p>}
+            {orderButton}
+            <p className="pd-note">{isLaptop ? 'Configuration prices are confirmed by RXB. ' : ''}Sending a WhatsApp message starts an inquiry; it does not place an order.</p>
+          </div>
+
+          <a className="pd-specs-link" href="#pd-specifications">View full specifications ↓</a>
         </div>
       </div>
-      <section className="product-detail-specifications" aria-labelledby="specifications-title">
-        <div><span className="eyebrow">PRODUCT INFORMATION</span><h2 id="specifications-title">Specifications</h2></div>
-        <dl>{specifications.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
-      </section>
-      <button type="button" className="product-detail-back-bottom" onClick={onClose}>← Back to the catalog</button>
+
+      <div className="pd-sections">
+        {descriptionLines.length > 0 && <section className="pd-section" id="pd-overview" aria-labelledby="pd-overview-title">
+          <h2 id="pd-overview-title">Overview</h2>
+          <div className="pd-description">{descriptionLines.map((line, index) => <p key={index} dir="auto">{line}</p>)}</div>
+        </section>}
+        <section className="pd-section" id="pd-specifications" aria-labelledby="pd-specifications-title">
+          <h2 id="pd-specifications-title">Technical Specifications</h2>
+          <div className="pd-spec-groups">
+            {specificationGroups.map(group => <div key={group.title} className="pd-spec-group">
+              <h3>{group.title}</h3>
+              <dl>{group.rows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd dir="auto">{value}</dd></div>)}</dl>
+            </div>)}
+          </div>
+        </section>
+      </div>
     </div>
   </section>
 }

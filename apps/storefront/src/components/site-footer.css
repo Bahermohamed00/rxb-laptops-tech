@@ -1,0 +1,90 @@
+.sf-footer {
+  margin-top: 40px;
+  border-top: 1px solid var(--sf-line);
+  background: #04070e;
+  color: var(--sf-muted);
+  font: 14px/1.5 var(--sf-body);
+}
+.sf-footer-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, .8fr) minmax(0, 1.4fr);
+  gap: 48px;
+  padding-block: 32px 36px;
+}
+.sf-footer-logo img { display: block; width: 128px; height: auto; }
+.sf-footer-brand p { max-width: 280px; margin: 12px 0 0; font-size: 14px; line-height: 1.6; }
+.sf-socials { display: flex; gap: 14px; margin: 18px 0 0; padding: 0; list-style: none; }
+.sf-socials a { color: var(--sf-text); font-size: 13px; }
+.sf-footer h2 { margin: 0 0 12px; color: var(--sf-text); font: 600 15px/1.3 var(--sf-body); }
+.sf-footer nav ul { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.sf-footer nav a, .sf-footer-bottom { color: var(--sf-muted); }
+.sf-footer a { transition: color .16s ease; }
+.sf-footer nav a:hover { color: var(--sf-text); }
+.sf-footer a:focus-visible { outline: 2px solid var(--sf-electric); outline-offset: 3px; border-radius: 2px; }
+
+.sf-footer-help-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0; }
+.sf-footer-help-head svg { width: 20px; height: 20px; color: var(--sf-electric); }
+.sf-footer-help-head strong { color: var(--sf-text); font-weight: 600; }
+.sf-footer-help-head span { flex-basis: 100%; font-size: 13px; }
+.sf-footer-whatsapp {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 46px;
+  margin: 14px 0 22px;
+  width: min(100%, 210px);
+  border-radius: 4px;
+  color: #fff;
+  background: var(--sf-green);
+  font-weight: 600;
+}
+.sf-footer-whatsapp svg { width: 22px; height: 22px; }
+.sf-footer-whatsapp:hover { background: #26cc66; }
+.sf-footer-help h2 { margin-bottom: 10px; font-size: 14px; }
+.sf-payments { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.sf-payments li {
+  padding: 5px 9px;
+  border: 1px solid var(--sf-line-strong);
+  border-radius: 4px;
+  color: var(--sf-text);
+  background: #0a1120;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .02em;
+}
+.sf-payments li:first-child { color: #fff; font-style: italic; font-weight: 800; letter-spacing: .04em; }
+
+.sf-footer-bottom { border-top: 1px solid var(--sf-line); font-size: 13px; }
+.sf-footer-bottom .sf-container { display: flex; justify-content: space-between; gap: 16px; padding-block: 16px; }
+.sf-footer-bottom i { margin-inline: 8px; font-style: normal; opacity: .5; }
+/* Keep the bar's last line clear of the fixed floating WhatsApp button (pill on desktop, 48px circle ≤ 600px). */
+.sf-footer-bottom .sf-container > span:last-child { margin-right: 140px; }
+@media (max-width: 600px) { .sf-footer-bottom .sf-container > span:last-child { margin-right: 56px; } }
+
+/* Light theme — Frosted Silver: a slightly deeper silver anchors the page. */
+[data-theme="light"] .sf-footer { border-top-color: #cfd8e6; background: linear-gradient(180deg, #e4e9f2, #dfe5ef); color: #4a5871; }
+[data-theme="light"] .sf-footer h2 { color: #111c32; font-weight: 700; }
+[data-theme="light"] .sf-footer-brand p { color: #4a5871; }
+[data-theme="light"] .sf-footer nav a { color: #3b4a63; }
+[data-theme="light"] .sf-footer nav a:hover { color: #2563eb; }
+[data-theme="light"] .sf-footer-help-head svg { color: #2563eb; }
+[data-theme="light"] .sf-footer-help-head span { color: #4a5871; }
+[data-theme="light"] .sf-payments li { border-color: #cbd5e4; color: #111c32; background: #fff; box-shadow: 0 1px 2px rgba(17, 28, 50, .06); }
+[data-theme="light"] .sf-payments li:first-child { color: #1a1f71; }
+[data-theme="light"] .sf-footer-whatsapp { background: #15803d; box-shadow: 0 8px 18px -10px rgba(21, 128, 61, .7); }
+[data-theme="light"] .sf-footer-whatsapp:hover { background: #166534; }
+[data-theme="light"] .sf-footer-bottom { border-color: #cfd8e6; color: #55647c; background: #d9e0eb; }
+
+/* Tablet: 2 × 2 — brand beside contact, the two link lists underneath. */
+@media (max-width: 1100px) {
+  .sf-footer-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px 40px; }
+  .sf-footer-help { grid-column: 2; grid-row: 1; }
+}
+/* Mobile: brand and contact full width, Shop and Company side by side. */
+@media (max-width: 640px) {
+  .sf-footer-grid { gap: 28px 20px; }
+  .sf-footer-brand, .sf-footer-help { grid-column: 1 / -1; grid-row: auto; }
+  .sf-footer-help { order: 1; }
+  .sf-footer-bottom .sf-container { flex-direction: column; gap: 6px; }
+}
