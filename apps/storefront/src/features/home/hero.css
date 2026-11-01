@@ -61,18 +61,10 @@
 .sf-hero-actions .sf-btn-ghost { border-color: rgba(200, 215, 240, .28); background: rgba(255, 255, 255, .02); }
 .sf-hero-actions .sf-btn-ghost:hover { border-color: rgba(200, 215, 240, .6); }
 
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  border: 1px solid rgba(110, 160, 255, .28);
-  border-radius: 8px;
-  color: #6aa6ff;
-  background: rgba(47, 125, 255, .06);
-}
-
 /* Visual */
-.sf-hero-visual { position: relative; align-self: stretch; display: grid; align-items: center; }
+/* Disabled: a selector-less declaration block used to precede this rule, so browsers discarded it as invalid.
+   Kept commented to preserve the current rendering; re-enable deliberately if the centered layout is wanted.
+.sf-hero-visual { position: relative; align-self: stretch; display: grid; align-items: center; } */
 .sf-hero-machine { position: relative; width: 100%; max-width: 760px; justify-self: end; }
 .sf-hero-machine::before {
   content: "";
@@ -109,3 +101,24 @@
   .sf-hero-lede { font-size: 16px; }
   .sf-hero-actions .sf-btn { flex: 1 1 150px; min-width: 0; }
 }
+
+/* Light theme: the hero keeps its dark cinematic artwork, re-scopes the dark storefront tokens, and becomes an
+   inset showcase panel so the dark-to-silver change reads as a framed stage rather than a hard full-bleed cut. */
+[data-theme="light"] .sf-hero {
+  --sf-text: #eef3fb;
+  --sf-muted: #a3afc3;
+  --sf-electric: #2f7dff;
+  --sf-line: rgba(130, 160, 214, .16);
+  --sf-line-strong: rgba(130, 160, 214, .3);
+  /* Same outer edges as .sf-container, so the panel lines up with the category cards and sections below. */
+  margin: 20px max(var(--sf-gutter), (100% - var(--sf-container)) / 2) 0;
+  border: 1px solid rgba(17, 28, 50, .6);
+  border-radius: 22px;
+  color: var(--sf-text);
+  box-shadow: 0 28px 56px -30px rgba(17, 28, 50, .55), 0 2px 6px rgba(17, 28, 50, .08);
+}
+@media (max-width: 560px) {
+  [data-theme="light"] .sf-hero { margin-top: 12px; border-radius: 16px; }
+}
+[data-theme="light"] .sf-hero-actions .sf-btn-ghost { border-color: rgba(200, 215, 240, .28); background: rgba(255, 255, 255, .02); }
+[data-theme="light"] .sf-hero-actions .sf-btn-ghost:hover { border-color: rgba(200, 215, 240, .6); background: rgba(255, 255, 255, .06); }

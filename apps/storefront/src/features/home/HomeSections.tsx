@@ -2,9 +2,8 @@ import { useState } from 'react'
 import type { CSSProperties, FormEvent } from 'react'
 import type { StoreProduct } from '../products/products.api'
 import { whatsappUrl } from '../../config/business-contact'
-import { ArrowRightIcon, CardIcon, HeadsetIcon, ShieldIcon, TruckIcon } from '../../components/icons'
+import { ArrowRightIcon } from '../../components/icons'
 import { Hero } from './Hero'
-import { NeonCityArt, OpenLaptopArt } from './LaptopArt'
 import { ProductTile, ProductTileSkeleton } from './ProductTile'
 
 const delay = (index: number) => ({ '--d': `${index * 90}ms` }) as CSSProperties
@@ -16,13 +15,23 @@ const categories = [
   { title: 'Accessories', text: 'Upgrade Your Setup.', href: '/laptops#accessories', image: 'rxb_accessories.png', position: 'center 50%' },
 ]
 
-const brands = ['ASUS', 'Lenovo', 'Dell', 'HP', 'MSI', 'Acer', 'Apple', 'Razer', 'Microsoft', 'Samsung']
-
-const reasons = [
-  { Icon: TruckIcon, title: ['Fast Delivery', 'Across Egypt'], text: 'Get your order quickly and safely.' },
-  { Icon: ShieldIcon, title: ['100% Original Products', 'Official Warranty'], text: 'Trusted brands, real products.' },
-  { Icon: HeadsetIcon, title: ['Expert Support', 'Before & After Purchase'], text: 'We’re here to help you choose the right device.' },
-  { Icon: CardIcon, title: ['Flexible Payment Options'], text: 'Cash, bank transfer, or payment on delivery.' },
+/*
+ * Logos live in /public/brands. All but Microsoft come from Simple Icons 16.36.0 (CC0; each traced from the
+ * brand's own site or press kit), cropped to their artwork and filled white. Microsoft is its official 2012 logo
+ * (Wikimedia Commons), unmodified and shown in single-colour white by CSS. "mark" logos are emblems without a
+ * wordmark, so the brand name is also shown under them.
+ */
+const brands: { name: string; logo: string; kind: 'wordmark' | 'mark' }[] = [
+  { name: 'ASUS', logo: 'asus.svg', kind: 'wordmark' },
+  { name: 'Lenovo', logo: 'lenovo.svg', kind: 'wordmark' },
+  { name: 'Dell', logo: 'dell.svg', kind: 'mark' },
+  { name: 'HP', logo: 'hp.svg', kind: 'mark' },
+  { name: 'MSI', logo: 'msi.svg', kind: 'mark' },
+  { name: 'Acer', logo: 'acer.svg', kind: 'wordmark' },
+  { name: 'Apple', logo: 'apple.svg', kind: 'mark' },
+  { name: 'Razer', logo: 'razer.svg', kind: 'mark' },
+  { name: 'Microsoft', logo: 'microsoft.svg', kind: 'wordmark' },
+  { name: 'Samsung', logo: 'samsung.svg', kind: 'wordmark' },
 ]
 
 function SectionHead({ id, title, text, link }: { id: string; title: string; text?: string; link?: { label: string; href: string } }) {
@@ -53,53 +62,25 @@ function Featured({ products, loading, error, onRetry, onOpen }: FeaturedProps) 
     <SectionHead id="sf-featured-title" title="Featured Laptops" text="Our top picks, carefully selected for performance, quality, and value." link={{ label: 'View All', href: '/laptops' }} />
     {error ? <div className="sf-state" role="alert"><strong>We couldn’t load the RXB catalog.</strong><span>{error}</span><button type="button" className="sf-btn sf-btn-ghost" onClick={onRetry}>Try again</button></div>
       : loading ? <div className="sf-product-grid" role="status" aria-label="Loading featured laptops">{Array.from({ length: 4 }, (_, index) => <ProductTileSkeleton key={index} />)}</div>
-        : featured.length ? <div className="sf-product-grid">{featured.map((product, index) => <ProductTile key={product.id} product={product} index={index} onOpen={() => onOpen(product)} />)}</div>
+        : featured.length ? <div className="sf-product-grid">{featured.map((product, index) => <ProductTile key={product.id} product={product} index={index} glow={index === 0} onOpen={() => onOpen(product)} />)}</div>
           : <div className="sf-state"><strong>New laptops are being listed.</strong><span>Tell us what you need and we’ll source it for you.</span><a className="sf-btn sf-btn-primary" href={whatsappUrl('Hello RXB, I am looking for a laptop. Can you help me choose?')} target="_blank" rel="noreferrer">Ask on WhatsApp</a></div>}
   </section>
 }
 
-function Promotions() {
-  return <section className="sf-container sf-promos" aria-label="Promotions">
-    <a className="sf-promo sf-promo-gaming sf-reveal" href="/laptops?use=GAMING">
-      <NeonCityArt />
-      <span className="sf-promo-art"><OpenLaptopArt palette="violet" /></span>
-      <span className="sf-promo-copy">
-        <small className="sf-eyebrow">Game without compromise</small>
-        <strong>Gaming Laptops</strong>
-        <span>Top brands. Latest GPUs. Maximum performance.</span>
-        <span className="sf-btn sf-btn-light">Explore Gaming<ArrowRightIcon /></span>
-      </span>
-    </a>
-    <a className="sf-promo sf-promo-work sf-reveal" style={delay(1)} href="/laptops?use=WORK">
-      <span className="sf-promo-monitor" aria-hidden="true" />
-      <span className="sf-promo-art"><OpenLaptopArt palette="silver" /></span>
-      <span className="sf-promo-copy">
-        <small className="sf-eyebrow">Built for creators</small>
-        <strong>Workstations</strong>
-        <span>Power for your biggest ideas.</span>
-        <span className="sf-btn sf-btn-light">Shop Workstations<ArrowRightIcon /></span>
-      </span>
-    </a>
-  </section>
+function BrandCard({ brand }: { brand: typeof brands[number] }) {
+  const [missing, setMissing] = useState(false)
+  const showName = missing || brand.kind === 'mark'
+  return <a href={`/laptops?q=${encodeURIComponent(brand.name)}`} className={`sf-brand sf-brand-${brand.kind}${missing ? ' is-missing' : ''}`} aria-label={`Shop ${brand.name}`}>
+    {!missing && <img className={`sf-brand-logo sf-brand-logo-${brand.name.toLowerCase()}`} src={`/brands/${brand.logo}`} alt={`${brand.name} logo`} loading="lazy" decoding="async" onError={() => setMissing(true)} />}
+    {showName && <span className="sf-brand-name" aria-hidden="true">{brand.name}</span>}
+  </a>
 }
 
 function Brands() {
   return <section className="sf-container sf-section" id="brands" aria-labelledby="sf-brands-title">
     <SectionHead id="sf-brands-title" title="Shop by Brand" link={{ label: 'View All Brands', href: '/laptops' }} />
     <ul className="sf-brands">
-      {brands.map(brand => <li key={brand}><a href={`/laptops?q=${encodeURIComponent(brand)}`} className={`sf-brand sf-brand-${brand.toLowerCase()}`}>{brand}</a></li>)}
-    </ul>
-  </section>
-}
-
-function WhyRxb() {
-  return <section className="sf-container sf-section" aria-labelledby="sf-why-title">
-    <SectionHead id="sf-why-title" title="Why Choose RXB?" text="More than just a store — we’re tech enthusiasts, just like you." />
-    <ul className="sf-reasons">
-      {reasons.map(({ Icon, title, text }) => <li key={title[0]}>
-        <Icon />
-        <div><strong>{title.map(line => <span key={line}>{line}</span>)}</strong><p>{text}</p></div>
-      </li>)}
+      {brands.map(brand => <li key={brand.name}><BrandCard brand={brand} /></li>)}
     </ul>
   </section>
 }
@@ -134,9 +115,7 @@ export function HomeSections(props: FeaturedProps) {
     <Hero />
     <Categories />
     <Featured {...props} />
-    <Promotions />
     <Brands />
-    <WhyRxb />
     <div className="sf-container"><Newsletter /></div>
   </>
 }

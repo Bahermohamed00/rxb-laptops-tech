@@ -428,3 +428,71 @@
     animation: none !important;
   }
 }
+
+/* Technical micro-typography (both themes): wider-tracked monospace labels with a blue status tick. */
+.intro-top, .intro-bottom { font-size: 9px; letter-spacing: .22em; }
+.intro-label { display: inline-flex; align-items: center; gap: 10px; }
+.intro-label::before { content: ""; width: 18px; height: 1px; background: linear-gradient(90deg, #1687ff, #75eaff); box-shadow: 0 0 6px #1687ff99; }
+.intro-status > span { display: inline-flex; align-items: center; }
+.intro-overline { font-size: 9px; letter-spacing: .32em; }
+.intro-center > p { font-size: 10px; letter-spacing: .42em; }
+.intro-bottom button { font-size: 9px; letter-spacing: .18em; }
+@media (max-width: 600px) {
+  .intro-top, .intro-bottom { font-size: 7px; letter-spacing: .16em; }
+  .intro-label::before { width: 10px; }
+  .intro-overline { font-size: 7px; letter-spacing: .18em; }
+  .intro-center > p { font-size: 8px; letter-spacing: .26em; }
+}
+
+/* ---------------------------------------------------------------------------------------------------------------
+   Light theme — Frosted Silver. Same composition, timing and logo asset; only surfaces, light and ink change.
+   It follows the html data-theme set before first paint, so the intro opens in the saved theme with no flash,
+   and the in-intro toggle restyles it immediately.
+   --------------------------------------------------------------------------------------------------------------- */
+[data-theme="light"] .intro {
+  background:
+    radial-gradient(60% 55% at 50% 46%, #ffffff 0%, rgba(255, 255, 255, 0) 70%),
+    radial-gradient(45% 60% at 0% 70%, rgba(37, 99, 235, .1), transparent 70%),
+    radial-gradient(40% 55% at 100% 20%, rgba(14, 165, 233, .1), transparent 70%),
+    linear-gradient(180deg, #edf3fb 0%, #e9f0f9 55%, #e1e9f4 100%);
+}
+[data-theme="light"] .intro:after { background: radial-gradient(ellipse, transparent 52%, rgba(17, 28, 50, .09) 100%); }
+[data-theme="light"] .intro-grid { background-image: linear-gradient(rgba(37, 99, 235, .09) 1px, transparent 1px), linear-gradient(90deg, rgba(37, 99, 235, .09) 1px, transparent 1px); opacity: .5; }
+[data-theme="light"] .intro-blue { opacity: .14; }
+[data-theme="light"] .intro-blue-left { background: #2563eb; }
+[data-theme="light"] .intro-blue-right { background: #0ea5e9; }
+[data-theme="light"] .intro-scanline { background: linear-gradient(90deg, transparent, rgba(37, 99, 235, .45), transparent); opacity: .5; }
+
+/* Dark-navy micro-typography */
+[data-theme="light"] .intro-top, [data-theme="light"] .intro-bottom { color: #3b4a63; }
+[data-theme="light"] .intro-label { color: #111c32; }
+[data-theme="light"] .intro-top i { background: #2563eb; box-shadow: 0 0 8px rgba(37, 99, 235, .6); }
+[data-theme="light"] .intro-overline { color: #55647c; }
+[data-theme="light"] .intro-center > p { color: #111c32; }
+[data-theme="light"] .loader { background: #cdd7e6; }
+[data-theme="light"] .loader span { background: linear-gradient(90deg, #2563eb, #0ea5e9); box-shadow: 0 0 6px rgba(37, 99, 235, .45); }
+
+/* Frosted controls */
+[data-theme="light"] .intro-status .theme-toggle,
+[data-theme="light"] .intro-bottom button {
+  border-color: #c8d3e3;
+  color: #111c32;
+  background: rgba(255, 255, 255, .72);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 1px 2px rgba(17, 28, 50, .06);
+}
+[data-theme="light"] .intro-status .theme-toggle:hover,
+[data-theme="light"] .intro-bottom button:hover { border-color: #2563eb; color: #2563eb; }
+[data-theme="light"] .intro-bottom button span { color: #2563eb; }
+
+/* Logo: the exact silver asset, given a soft navy halo and edge shadow so its metallic detail holds on silver. */
+[data-theme="light"] .intro .assembly-frame:after,
+[data-theme="light"] .intro .logo-frame:after { background: radial-gradient(closest-side, rgba(17, 28, 50, .16), rgba(37, 99, 235, .08) 60%, transparent); filter: blur(36px); }
+[data-theme="light"] .intro .assembly-part,
+[data-theme="light"] .intro .assembled-logo { filter: drop-shadow(0 1px 1px rgba(17, 28, 50, .55)) drop-shadow(0 8px 18px rgba(17, 28, 50, .22)); }
+[data-theme="light"] .intro .logo-sweep { mix-blend-mode: overlay; background: linear-gradient(110deg, transparent 34%, rgba(255, 255, 255, .85) 49%, rgba(147, 197, 253, .5) 52%, transparent 65%); }
+[data-theme="light"] .intro .assembly-arcs path { filter: drop-shadow(0 0 3px rgba(37, 99, 235, .55)); }
+
+/* Skip Intro is centred on the screen at every width, independent of the side labels. */
+.intro-bottom button { position: absolute; left: 50%; transform: translateX(-50%); }

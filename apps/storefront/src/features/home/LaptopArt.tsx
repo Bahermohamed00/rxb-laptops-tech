@@ -2,13 +2,12 @@ import { useId } from 'react'
 
 const svgId = (id: string) => id.replace(/[^a-zA-Z0-9_-]/g, '')
 
-export type ScreenPalette = 'violet' | 'blue' | 'ember' | 'silver' | 'night'
+export type ScreenPalette = 'violet' | 'blue' | 'ember' | 'night'
 
 const palettes: Record<ScreenPalette, { sky: [string, string, string]; accent: string; body: string; glow: string }> = {
   violet: { sky: ['#2a0b5c', '#5b1ec4', '#0b0a2a'], accent: '#ff4fd8', body: '#1a1f2e', glow: '#7b3dff' },
   blue: { sky: ['#0a1a3e', '#1f4fb8', '#060c1d'], accent: '#7dc4ff', body: '#1b2130', glow: '#2b7bff' },
   ember: { sky: ['#3b1a10', '#d0662a', '#1a0c08'], accent: '#ffc274', body: '#1e2230', glow: '#ff7a2f' },
-  silver: { sky: ['#1b2230', '#3f4c63', '#0c1018'], accent: '#c9d6ea', body: '#4a5161', glow: '#8aa4c8' },
   night: { sky: ['#06101f', '#173a73', '#04070d'], accent: '#4f9bff', body: '#12161f', glow: '#2a6dff' },
 }
 
@@ -48,11 +47,6 @@ export function OpenLaptopArt({ palette = 'blue', className = '' }: { palette?: 
         <path d="M90 136 140 96 170 116 214 82 254 112 284 94 310 108V172H90Z" fill="#000" opacity=".55" />
         <path d="M90 152 130 128 176 146 222 120 266 140 310 126V172H90Z" fill="#000" opacity=".7" />
       </>}
-      {palette === 'silver' && <>
-        <rect x="112" y="40" width="70" height="44" rx="3" fill="#c9d6ea" opacity=".16" />
-        <rect x="190" y="40" width="98" height="96" rx="3" fill="#c9d6ea" opacity=".1" />
-        <rect x="112" y="92" width="70" height="44" rx="3" fill="#c9d6ea" opacity=".12" />
-      </>}
       <path d="M90 20h220L250 172H90Z" fill="#fff" opacity=".05" />
     </g>
     <path d="M78 178h244l52 34H26Z" fill={u('deck')} stroke="#2e3648" />
@@ -90,31 +84,5 @@ export function PeripheralsArt() {
     <rect x="262" y="104" width="34" height="64" rx="14" fill={u('shell')} stroke="#3a4762" />
     <rect x="372" y="104" width="34" height="64" rx="14" fill={u('shell')} stroke="#3a4762" />
     <path d="M272 120v32" stroke="#2b7bff" strokeWidth="2" strokeLinecap="round" />
-  </svg>
-}
-
-/** Neon city backdrop for the gaming promotion. */
-export function NeonCityArt() {
-  return <svg className="sf-banner-backdrop" viewBox="0 0 600 220" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-    <rect width="600" height="220" fill="#0b0720" />
-    <g opacity=".85">
-      <rect x="250" y="40" width="40" height="180" fill="#2a1460" />
-      <rect x="296" y="10" width="34" height="210" fill="#1d0f4a" />
-      <rect x="336" y="60" width="46" height="160" fill="#311672" />
-      <rect x="388" y="24" width="30" height="196" fill="#1a1046" />
-      <rect x="424" y="70" width="52" height="150" fill="#2c1666" />
-      <rect x="482" y="30" width="36" height="190" fill="#180e40" />
-      <rect x="524" y="80" width="76" height="140" fill="#26135a" />
-    </g>
-    <g fill="#ff4fd8" opacity=".75">
-      <rect x="304" y="30" width="3" height="120" />
-      <rect x="430" y="90" width="40" height="2" />
-      <rect x="490" y="50" width="2" height="90" />
-    </g>
-    <g fill="#4fb4ff" opacity=".8">
-      <rect x="342" y="80" width="34" height="2" />
-      <rect x="396" y="40" width="2" height="110" />
-      <rect x="532" y="100" width="56" height="2" />
-    </g>
   </svg>
 }

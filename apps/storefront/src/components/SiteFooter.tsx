@@ -1,4 +1,4 @@
-import { SOCIAL_LINKS, generalInquiryUrl, topicInquiryUrl } from '../config/business-contact'
+import { SOCIAL_LINKS, generalInquiryUrl } from '../config/business-contact'
 import { PhoneIcon, WhatsAppIcon } from './icons'
 import './site-footer.css'
 
@@ -14,21 +14,9 @@ const columns = [
     ],
   },
   {
-    title: 'Customer Service',
-    links: [
-      { label: 'Track Order', href: topicInquiryUrl('tracking my order'), external: true },
-      { label: 'Shipping & Delivery', href: topicInquiryUrl('shipping and delivery'), external: true },
-      { label: 'Returns & Warranty', href: topicInquiryUrl('returns and warranty'), external: true },
-      { label: 'FAQ', href: '/about' },
-      { label: 'Contact Us', href: generalInquiryUrl(), external: true },
-    ],
-  },
-  {
     title: 'Company',
     links: [
-      { label: 'About RXB', href: '/about' },
-      { label: 'Our Mission', href: '/about' },
-      { label: 'Browse Brands', href: '/#brands' },
+      { label: 'About Us', href: '/about' },
     ],
   },
 ]
@@ -46,7 +34,7 @@ export function SiteFooter() {
       </div>
       {columns.map(column => <nav key={column.title} aria-label={column.title}>
         <h2>{column.title}</h2>
-        <ul>{column.links.map(link => <li key={link.label}><a href={link.href} {...('external' in link ? { target: '_blank', rel: 'noreferrer' } : {})}>{link.label}</a></li>)}</ul>
+        <ul>{column.links.map(link => <li key={link.label}><a href={link.href}>{link.label}</a></li>)}</ul>
       </nav>)}
       <div className="sf-footer-help">
         <p className="sf-footer-help-head"><PhoneIcon /><strong>Need Help?</strong><span>Chat with us on WhatsApp</span></p>

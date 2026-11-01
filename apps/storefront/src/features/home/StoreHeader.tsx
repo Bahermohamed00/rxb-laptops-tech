@@ -4,6 +4,8 @@ import { imageSource, type StoreProduct } from '../products/products.api'
 import { generalInquiryUrl, topicInquiryUrl, whatsappUrl } from '../../config/business-contact'
 import { BriefcaseIcon, CartIcon, ChevronDownIcon, CpuIcon, GamepadIcon, GraduationIcon, HelpIcon, LaptopIcon, MenuIcon, MouseIcon, PhoneIcon, SearchIcon, WhatsAppIcon } from '../../components/icons'
 import { formatEgp, matchesSearch, productTypeLabel } from './catalog'
+import { ThemeToggle } from '../../components/ThemeToggle'
+import type { Theme } from '../../theme/useTheme'
 
 const categoryLinks = [
   { label: 'Gaming Laptops', href: '/laptops?use=GAMING', Icon: GamepadIcon },
@@ -37,9 +39,11 @@ type StoreHeaderProps = {
   onSearchChange: (value: string) => void
   onSearchSubmit: () => void
   onOpenProduct: (product: StoreProduct) => void
+  theme: Theme
+  onToggleTheme: () => void
 }
 
-export function StoreHeader({ products, loading, error, search, onSearchChange, onSearchSubmit, onOpenProduct }: StoreHeaderProps) {
+export function StoreHeader({ products, loading, error, search, onSearchChange, onSearchSubmit, onOpenProduct, theme, onToggleTheme }: StoreHeaderProps) {
   const [focused, setFocused] = useState(false)
   const [active, setActive] = useState(-1)
   const [categoriesOpen, setCategoriesOpen] = useState(false)
@@ -134,6 +138,7 @@ export function StoreHeader({ products, loading, error, search, onSearchChange, 
       <div className="sf-header-actions">
         <a href={topicInquiryUrl('tracking my order')} target="_blank" rel="noreferrer"><PhoneIcon /><span>Track Order</span></a>
         <a href={generalInquiryUrl()} target="_blank" rel="noreferrer"><HelpIcon /><span>Need Help?</span></a>
+        <ThemeToggle theme={theme} onToggle={onToggleTheme} />
         <a className="sf-cart" href={whatsappUrl('Hello RXB, I would like to place an order.')} target="_blank" rel="noreferrer" aria-label="Order via WhatsApp"><CartIcon /></a>
       </div>
     </div>

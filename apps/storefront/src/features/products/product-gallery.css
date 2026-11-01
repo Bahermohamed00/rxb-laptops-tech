@@ -7,6 +7,7 @@
   --pg-glass: rgba(7, 11, 18, .66);
   --pg-glass-line: rgba(255, 255, 255, .12);
   --pg-accent: #258bff;
+  --pg-cyan: #61c7ff;
   --pg-text: #f5f7fa;
   --pg-muted: #8b9bb0;
   display: grid;
@@ -41,8 +42,11 @@
 .pg-zoom {
   position: absolute;
   inset: 0;
-  display: grid;
-  place-items: center;
+  /* Flex (not grid) so the photo's max-width/max-height resolve against this definite box: portrait photos then
+     shrink to fit instead of overflowing the 4:3 stage and being clipped. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: clamp(16px, 3.4vw, 40px);
   border: 0;
   background: transparent;
@@ -55,8 +59,30 @@
   object-fit: contain;
   border-radius: 10px;
   box-shadow: 0 20px 50px rgba(0, 0, 0, .4);
-  animation: pgPhotoIn .4s cubic-bezier(.2, .7, .2, 1) both;
+  opacity: 0;
+  transform-origin: var(--pg-zx, 50%) var(--pg-zy, 50%);
+  transition: scale .35s cubic-bezier(.2, .7, .2, 1), box-shadow .35s ease;
 }
+/* Reveal only once the file has loaded, so a slow image never "pops" after the transition has already played. */
+.pg-photo.is-in { opacity: 1; animation: pgPhotoSlide .5s cubic-bezier(.2, .7, .2, 1) backwards; }
+
+/* Desktop hover magnifier: the individual `scale` property composes with the slide-in `transform`. */
+@media (hover: hover) and (pointer: fine) {
+  .pg-zoom.is-magnified .pg-photo { scale: 1.8; box-shadow: none; transition-duration: .25s, .25s; }
+}
+
+/* One thin cyan scan line crossing the stage after each photo change. */
+.pg-sweep {
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: 1;
+  width: 38%;
+  background: linear-gradient(90deg, transparent, rgba(97, 199, 255, .08) 45%, rgba(97, 199, 255, .22) 50%, rgba(97, 199, 255, .08) 55%, transparent);
+  pointer-events: none;
+  transform: translateX(-110%);
+  animation: pgSweep .8s cubic-bezier(.4, 0, .2, 1) forwards;
+}
+.pg-stage:has(.pg-zoom.is-magnified) .pg-sweep { display: none; }
 .pg-empty { display: grid; place-items: center; align-content: center; gap: 10px; height: 100%; color: var(--pg-muted); font-size: 13px; }
 .pg-empty strong { color: var(--pg-text); font: 700 48px var(--display); letter-spacing: -.06em; }
 
@@ -128,6 +154,7 @@
 /* Thumbnails: vertical rail beside the stage on wide screens, strip below on narrow ones. */
 .pg-thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 10px; margin: 0; padding: 2px; overflow-x: auto; list-style: none; scrollbar-width: thin; }
 .pg-thumbs button {
+  position: relative;
   display: grid;
   place-items: center;
   width: 100%;
@@ -141,12 +168,29 @@
   font-size: 10px;
   opacity: .55;
   cursor: pointer;
-  transition: opacity .2s ease, border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+  transition: opacity .25s ease, border-color .25s ease, box-shadow .25s ease, transform .25s cubic-bezier(.2, .7, .2, 1);
 }
-.pg-thumbs button:hover { opacity: .9; border-color: var(--pg-line-strong); transform: translateY(-2px); }
-.pg-thumbs button.is-active { opacity: 1; border-color: var(--pg-accent); box-shadow: 0 0 0 1px var(--pg-accent), 0 6px 18px rgba(47, 125, 255, .25); }
+/* Active marker: a short blue→cyan bar that grows in along the bottom edge. */
+.pg-thumbs button::after {
+  content: "";
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  bottom: 3px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--pg-accent), var(--pg-cyan));
+  box-shadow: 0 0 8px rgba(97, 199, 255, .6);
+  transform: scaleX(0);
+  transition: transform .3s cubic-bezier(.2, .7, .2, 1);
+}
+.pg-thumbs button:hover { opacity: .9; border-color: rgba(97, 199, 255, .45); box-shadow: 0 0 0 1px rgba(97, 199, 255, .12), 0 6px 16px rgba(22, 135, 255, .14); transform: translateY(-2px); }
+.pg-thumbs button.is-active { opacity: 1; border-color: var(--pg-accent); box-shadow: 0 0 0 1px var(--pg-accent), 0 0 0 4px rgba(37, 139, 255, .12), 0 6px 18px rgba(47, 125, 255, .28); }
+.pg-thumbs button.is-active::after { transform: scaleX(1); }
 .pg-thumbs button:focus-visible { outline: 2px solid var(--pg-accent); outline-offset: 2px; }
-.pg-thumbs img { width: 100%; height: 100%; object-fit: contain; border-radius: 6px; }
+/* Pinned to the tile's padding box so object-fit: contain shows the whole photo, portrait or landscape. */
+.pg-thumbs img { position: absolute; inset: 5px; width: calc(100% - 10px); height: calc(100% - 10px); object-fit: contain; border-radius: 6px; transition: transform .35s cubic-bezier(.2, .7, .2, 1); }
+.pg-thumbs button:hover img { transform: scale(1.06); }
 
 /* Fullscreen viewer */
 .pg-lightbox {
@@ -188,6 +232,8 @@
 .pg-lightbox .pg-nav, .pg-lightbox .pg-close, .pg-lightbox .pg-lightbox-count { --pg-glass: rgba(20, 28, 44, .7); --pg-text: #e8eef8; --pg-glass-line: rgba(255, 255, 255, .16); }
 
 @keyframes pgPhotoIn { from { opacity: 0; transform: scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes pgPhotoSlide { from { opacity: 0; transform: translateX(calc(var(--pg-dir, 1) * 28px)) scale(.985); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
+@keyframes pgSweep { from { transform: translateX(-110%); opacity: 1; } 70% { opacity: 1; } to { transform: translateX(280%); opacity: 0; } }
 
 @media (max-width: 600px) {
   .pg-stage { border-radius: 12px; }
@@ -198,8 +244,28 @@
   .pg-nav.is-next { right: 10px; }
   .pg-indicator { bottom: 10px; }
 }
+/* Light theme — Frosted Silver: silver stage and white thumbnails; glass controls over photos and the fullscreen viewer stay dark. */
+[data-theme="light"] .pg {
+  --pg-bg: #e8edf5;
+  --pg-glow: #ffffff;
+  --pg-line: #dce4f0;
+  --pg-line-strong: #c8d3e3;
+  --pg-accent: #2563eb;
+  --pg-cyan: #0ea5e9;
+  --pg-muted: #55647c;
+}
+[data-theme="light"] .pg-stage { box-shadow: 0 1px 2px rgba(17, 28, 50, .05), 0 16px 32px -20px rgba(17, 28, 50, .3); }
+[data-theme="light"] .pg-stage::after { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .6), inset 0 0 60px rgba(17, 28, 50, .05); }
+[data-theme="light"] .pg-photo { box-shadow: 0 18px 40px -16px rgba(17, 28, 50, .35); }
+[data-theme="light"] .pg-empty strong { color: #111c32; }
+[data-theme="light"] .pg-thumbs button { background: #fff; opacity: .7; }
+[data-theme="light"] .pg-thumbs button:hover { opacity: 1; border-color: rgba(37, 99, 235, .45); box-shadow: 0 0 0 3px rgba(14, 165, 233, .1), 0 8px 18px -10px rgba(17, 28, 50, .3); }
+[data-theme="light"] .pg-thumbs button.is-active { box-shadow: 0 0 0 1px var(--pg-accent), 0 0 0 4px rgba(37, 99, 235, .12), 0 8px 18px -10px rgba(37, 99, 235, .45); }
+[data-theme="light"] .pg-sweep { background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .25) 45%, rgba(255, 255, 255, .55) 50%, rgba(255, 255, 255, .25) 55%, transparent); }
+
 @media (prefers-reduced-motion: reduce) {
-  .pg-photo, .pg-lightbox-photo { animation: none; }
-  .pg-nav, .pg-hint, .pg-thumbs button, .pg-dots i { transition: none; }
-  .pg-thumbs button:hover { transform: none; }
+  .pg-photo, .pg-photo.is-in, .pg-lightbox-photo { animation: none; }
+  .pg-photo, .pg-nav, .pg-hint, .pg-thumbs button, .pg-thumbs button::after, .pg-thumbs img, .pg-dots i { transition: none; }
+  .pg-thumbs button:hover, .pg-thumbs button:hover img { transform: none; }
+  .pg-sweep { display: none; }
 }

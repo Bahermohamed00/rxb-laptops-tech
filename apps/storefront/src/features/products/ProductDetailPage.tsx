@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { fetchProductDetail, fetchQuote, type StoreProduct } from './products.api'
+import { fetchProductDetail, fetchQuote, type PublicOption, type StoreProduct } from './products.api'
 import { productInquiryMessage, whatsappUrl } from '../../config/business-contact'
 import { CpuIcon, GpuIcon, LaptopIcon, MouseIcon, WhatsAppIcon } from '../../components/icons'
 import { formatEgp } from '../home/catalog'
@@ -8,6 +8,9 @@ import './product-detail.css'
 
 const deltaLabel = (minor: number, currency: string) => minor === 0 ? 'Included' : `${minor > 0 ? '+' : '−'} ${formatEgp(Math.abs(minor), currency)}`
 const storageLabel = (gb: number) => gb >= 1000 && gb % 1000 === 0 ? `${gb / 1000} TB` : `${gb} GB`
+const optionLabel = (kind: 'ram' | 'storage', option: PublicOption) => `${kind === 'storage' ? storageLabel(option.capacityGB) : `${option.capacityGB} GB`} ${option.type}`
+const MemoryGlyph = () => <svg className="pd-option-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8h18v8H3zM7 8v8M11 8v8M15 8v8M19 8v8M6 16v2M10 16v2M14 16v2M18 16v2" /></svg>
+const DriveGlyph = () => <svg className="pd-option-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v10H4zM7.5 12h6M17 12h.01" /></svg>
 const accessorySpecLabels: Record<string, string> = {
   keyboardType: 'Keyboard type',
   connection: 'Connection',
@@ -34,6 +37,7 @@ export function ProductDetailPage({ product, onClose }: { product: StoreProduct;
   const [detailsLoading, setDetailsLoading] = useState(true)
   const [detailsError, setDetailsError] = useState('')
   const [retry, setRetry] = useState(0)
+  const [adjustment, setAdjustment] = useState('')
 
   useEffect(() => {
     let active = true
@@ -44,29 +48,54 @@ export function ProductDetailPage({ product, onClose }: { product: StoreProduct;
 
   useEffect(() => {
     if (!details) return
-    setRamId(details.ramOptions.find(option => option.isBase)?.id ?? details.ramOptions[0]?.id ?? '')
-    setStorageId(details.storageOptions.find(option => option.isBase)?.id ?? details.storageOptions[0]?.id ?? '')
+    const baseRamId = details.ramOptions.find(option => option.isBase)?.id ?? details.ramOptions[0]?.id ?? ''
+    const baseStorageId = details.storageOptions.find(option => option.isBase)?.id ?? details.storageOptions[0]?.id ?? ''
+    // Start from the base pair; fall back to the first offered pair if the base pair is not offered.
+    const start = details.combinations.some(pair => pair.ramOptionId === baseRamId && pair.storageOptionId === baseStorageId)
+      ? { ramOptionId: baseRamId, storageOptionId: baseStorageId }
+      : details.combinations[0] ?? { ramOptionId: baseRamId, storageOptionId: baseStorageId }
+    setRamId(start.ramOptionId)
+    setStorageId(start.storageOptionId)
+    setAdjustment('')
   }, [details])
 
-  const compatibleStorageIds = details?.combinations.filter(pair => pair.ramOptionId === ramId).map(pair => pair.storageOptionId) ?? []
-  const compatibleRamIds = details?.combinations.filter(pair => pair.storageOptionId === storageId).map(pair => pair.ramOptionId) ?? []
-  function selectRam(nextRamId: string) {
+  const isOffered = (nextRamId: string, nextStorageId: string) => Boolean(details?.combinations.some(pair => pair.ramOptionId === nextRamId && pair.storageOptionId === nextStorageId))
+  /** Options of the other specification that are offered together with `id`. */
+  function partnersOf(kind: 'ram' | 'storage', id: string) {
+    const pairs = details?.combinations ?? []
+    return kind === 'ram' ? pairs.filter(pair => pair.ramOptionId === id).map(pair => pair.storageOptionId) : pairs.filter(pair => pair.storageOptionId === id).map(pair => pair.ramOptionId)
+  }
+  /**
+   * The partner that selecting `id` would leave in place: the current one when it is still offered, otherwise the
+   * offered partner closest in capacity to the current one, then the cheaper upgrade.
+   */
+  function resolvePartner(kind: 'ram' | 'storage', id: string): PublicOption | undefined {
+    const partnerOptions = (kind === 'ram' ? details?.storageOptions : details?.ramOptions) ?? []
+    const currentPartner = partnerOptions.find(option => option.id === (kind === 'ram' ? storageId : ramId))
+    const candidates = partnersOf(kind, id).map(partnerId => partnerOptions.find(option => option.id === partnerId)).filter((option): option is PublicOption => Boolean(option))
+    if (currentPartner && candidates.some(option => option.id === currentPartner.id)) return currentPartner
+    const reference = currentPartner?.capacityGB ?? 0
+    return [...candidates].sort((a, b) => Math.abs(a.capacityGB - reference) - Math.abs(b.capacityGB - reference) || a.priceDeltaMinor - b.priceDeltaMinor)[0]
+  }
+  function select(kind: 'ram' | 'storage', id: string) {
+    const options = (kind === 'ram' ? details?.ramOptions : details?.storageOptions) ?? []
+    const chosen = options.find(option => option.id === id)
+    const partner = resolvePartner(kind, id)
+    if (!chosen || !partner) return
+    const previousPartnerId = kind === 'ram' ? storageId : ramId
+    const nextRamId = kind === 'ram' ? id : partner.id
+    const nextStorageId = kind === 'ram' ? partner.id : id
+    if (!isOffered(nextRamId, nextStorageId)) return
+    // Both ids change in one render, so the quote request only ever sees the final, offered pair.
     setRamId(nextRamId)
-    const nextStorageIds = details?.combinations.filter(pair => pair.ramOptionId === nextRamId).map(pair => pair.storageOptionId) ?? []
-    if (!nextStorageIds.includes(storageId)) {
-      const nextPair = details?.combinations.find(pair => pair.ramOptionId === nextRamId)
-      if (nextPair) setStorageId(nextPair.storageOptionId)
-    }
-  }
-  function selectStorage(nextStorageId: string) {
     setStorageId(nextStorageId)
-    const nextRamIds = details?.combinations.filter(pair => pair.storageOptionId === nextStorageId).map(pair => pair.ramOptionId) ?? []
-    if (!nextRamIds.includes(ramId)) {
-      const nextPair = details?.combinations.find(pair => pair.storageOptionId === nextStorageId)
-      if (nextPair) setRamId(nextPair.ramOptionId)
-    }
+    if (partner.id === previousPartnerId) { setAdjustment(''); return }
+    const otherKind = kind === 'ram' ? 'storage' : 'ram'
+    const previousPartner = (kind === 'ram' ? details?.storageOptions : details?.ramOptions)?.find(option => option.id === previousPartnerId)
+    setAdjustment(`${otherKind === 'ram' ? 'Memory' : 'Storage'} changed to ${optionLabel(otherKind, partner)}${previousPartner ? ` — ${optionLabel(kind, chosen)} ${kind === 'ram' ? 'RAM' : 'storage'} isn’t offered with ${optionLabel(otherKind, previousPartner)}` : ''}.`)
   }
-
+  const compatibleRamIds = partnersOf('storage', storageId)
+  const compatibleStorageIds = partnersOf('ram', ramId)
   useEffect(() => {
     if (!details || details.productType !== 'LAPTOP') {
       setQuote(null)
@@ -74,7 +103,8 @@ export function ProductDetailPage({ product, onClose }: { product: StoreProduct;
       setError('')
       return
     }
-    if (!ramId || !storageId) { setQuote(null); return }
+    // Never ask the server to price a pair that is not offered.
+    if (!ramId || !storageId || !isOffered(ramId, storageId)) { setQuote(null); setLoading(false); return }
     let active = true
     setLoading(true); setError(''); setQuote(null)
     void fetchQuote(details, ramId, storageId).then(value => { if (active) setQuote(value) }).catch(cause => { if (active) setError(cause instanceof Error ? cause.message : 'Price could not be confirmed.') }).finally(() => { if (active) setLoading(false) })
@@ -153,19 +183,29 @@ export function ProductDetailPage({ product, onClose }: { product: StoreProduct;
     const options = kind === 'ram' ? shownProduct.ramOptions : shownProduct.storageOptions
     const selected = kind === 'ram' ? ramId : storageId
     const compatible = kind === 'ram' ? compatibleRamIds : compatibleStorageIds
-    const select = kind === 'ram' ? selectRam : selectStorage
+    const otherKind = kind === 'ram' ? 'storage' : 'ram'
+    const current = options.find(option => option.id === selected)
     const locked = detailsLoading || !details || Boolean(detailsError)
     if (!options.length) return null
     return <fieldset className="pd-options" disabled={locked}>
-      <legend>{kind === 'ram' ? 'Memory (RAM)' : 'Storage'}</legend>
+      <legend><span>{kind === 'ram' ? 'Memory (RAM)' : 'Storage'}</span>{current && <b>{optionLabel(kind, current)}</b>}</legend>
       <div className="pd-option-grid">
         {options.map(option => {
-          const unavailable = Boolean(details && !compatible.includes(option.id))
+          // Only options with no offered pairing at all are unavailable; others re-pair the other specification on selection.
+          const unavailable = Boolean(details && partnersOf(kind, option.id).length === 0)
+          const conflict = Boolean(details && !unavailable && !compatible.includes(option.id))
+          const switchTo = conflict ? resolvePartner(kind, option.id) : undefined
           const checked = option.id === selected
-          return <label key={option.id} className={`pd-option${checked ? ' is-selected' : ''}${unavailable ? ' is-unavailable' : ''}`}>
-            <input type="radio" name={`pd-${kind}`} value={option.id} checked={checked} disabled={unavailable} onChange={() => select(option.id)} />
-            <span className="pd-option-name">{kind === 'storage' ? storageLabel(option.capacityGB) : `${option.capacityGB} GB`} <small>{option.type}</small></span>
-            <span className="pd-option-delta">{unavailable ? 'Not compatible' : deltaLabel(option.priceDeltaMinor, shownProduct.currency)}</span>
+          return <label key={option.id} className={`pd-option${checked ? ' is-selected' : ''}${unavailable ? ' is-unavailable' : ''}${conflict ? ' is-conflict' : ''}`}>
+            <input type="radio" name={`pd-${kind}`} value={option.id} checked={checked} disabled={unavailable} onChange={() => select(kind, option.id)} />
+            <span className="pd-option-head">
+              {kind === 'ram' ? <MemoryGlyph /> : <DriveGlyph />}
+              <small className="pd-option-type">{option.type}</small>
+              <i className="pd-option-check" aria-hidden="true" />
+            </span>
+            <span className="pd-option-name">{kind === 'storage' ? storageLabel(option.capacityGB) : `${option.capacityGB} GB`}</span>
+            <span className="pd-option-delta">{unavailable ? 'Currently unavailable' : deltaLabel(option.priceDeltaMinor, shownProduct.currency)}</span>
+            {switchTo && <span className="pd-option-switch"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 5.5h9l-2.5-2.5M13 10.5H4l2.5 2.5" /></svg>Switches {otherKind === 'ram' ? 'memory' : 'storage'} to {optionLabel(otherKind, switchTo)}</span>}
           </label>
         })}
       </div>
@@ -211,6 +251,11 @@ export function ProductDetailPage({ product, onClose }: { product: StoreProduct;
               <h2>Configure your laptop</h2>
               {optionGroup('ram')}
               {optionGroup('storage')}
+              <p className="pd-adjusted" role="status">{adjustment && <><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 5.5h9l-2.5-2.5M13 10.5H4l2.5 2.5" /></svg><span key={adjustment}>{adjustment}</span></>}</p>
+              {selectedRam && selectedStorage && <p className="pd-config">
+                <span>Your configuration</span>
+                <b>{optionLabel('ram', selectedRam)} RAM</b><i aria-hidden="true">+</i><b>{optionLabel('storage', selectedStorage)} storage</b>
+              </p>}
             </>}
             <div className="pd-total" aria-live="polite"><span>{isLaptop ? 'Selected configuration total' : 'Listed price'}</span><strong>{totalLabel}</strong></div>
             {detailsError && <p className="pd-error" role="alert">{detailsError} <button type="button" onClick={() => setRetry(value => value + 1)}>Retry</button></p>}

@@ -7,6 +7,7 @@ import { HomeSections } from './HomeSections'
 import { ProductTile } from './ProductTile'
 import { StoreHeader } from './StoreHeader'
 import { matchesSearch, parseEgp } from './catalog'
+import type { Theme } from '../../theme/useTheme'
 import './home.css'
 import './storefront.css'
 
@@ -30,9 +31,9 @@ function initialUseCase(): UseCase | null {
   return useCases.some(item => item.value === value) ? value as UseCase : null
 }
 
-type HomePageProps = { introVisible: boolean }
+type HomePageProps = { introVisible: boolean; theme: Theme; onToggleTheme: () => void }
 
-export default function HomePage({ introVisible }: HomePageProps) {
+export default function HomePage({ introVisible, theme, onToggleTheme }: HomePageProps) {
   const [products, setProducts] = useState<StoreProduct[]>([])
   const [loadingProducts, setLoadingProducts] = useState(true)
   const [productsError, setProductsError] = useState('')
@@ -188,7 +189,7 @@ export default function HomePage({ introVisible }: HomePageProps) {
     else window.location.assign(`/laptops${search.trim() ? `?q=${encodeURIComponent(search.trim())}` : ''}`)
   }
 
-  const header = <StoreHeader products={products} loading={loadingProducts} error={productsError} search={search} onSearchChange={setSearch} onSearchSubmit={submitSearch} onOpenProduct={openProduct} />
+  const header = <StoreHeader products={products} loading={loadingProducts} error={productsError} search={search} onSearchChange={setSearch} onSearchSubmit={submitSearch} onOpenProduct={openProduct} theme={theme} onToggleTheme={onToggleTheme} />
 
   if (routeSlug && !selectedProduct) return <main className="site site-ready sf">
     {header}

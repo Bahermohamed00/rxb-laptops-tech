@@ -17,7 +17,7 @@ export default function App() {
 
   if (path === '/about') return <><AboutPage theme={theme} onToggleTheme={toggleTheme} /><FloatingWhatsApp /></>
   return <>
-    <HomePage introVisible={introVisible} />
+    <HomePage introVisible={introVisible} theme={theme} onToggleTheme={toggleTheme} />
     {introVisible && <IntroScreen onComplete={() => setIntroVisible(false)} theme={theme} onToggleTheme={toggleTheme} />}
     <FloatingWhatsApp />
   </>
