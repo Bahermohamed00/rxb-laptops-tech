@@ -207,6 +207,15 @@ export function LiveProductEditor({ product, initialProductType = 'LAPTOP', csrf
           ...pair,
           isAvailable: pair.isAvailable && payload.ramOptions.some(option => option.capacityGB === pair.ramCapacityGB && option.type === pair.ramType && option.isAvailable) && payload.storageOptions.some(option => option.capacityGB === pair.storageCapacityGB && option.type === pair.storageType && option.isAvailable),
         }))
+        // The storefront only offers options that belong to an available pair, so an available upgrade without one would be silently hidden from customers.
+        const unpaired = [
+          ...payload.ramOptions.filter(option => option.isAvailable && !option.isBase && !payload.combinations.some(pair => pair.isAvailable && pair.ramCapacityGB === option.capacityGB && pair.ramType === option.type)).map(option => `${option.capacityGB} GB ${option.type} RAM`),
+          ...payload.storageOptions.filter(option => option.isAvailable && !option.isBase && !payload.combinations.some(pair => pair.isAvailable && pair.storageCapacityGB === option.capacityGB && pair.storageType === option.type)).map(option => `${option.capacityGB} GB ${option.type} storage`),
+        ]
+        if (unpaired.length) {
+          showFieldErrors({ combinations: `${unpaired.join(', ')} ${unpaired.length === 1 ? 'is' : 'are'} not offered with any compatible pair. Check at least one pair below, or mark the option unavailable.` }, 'Upgrade options must be paired before customers can see them.')
+          return
+        }
       }
       setSaving(true)
       const saved = product ? await updateProduct(product.id, payload, csrfToken) : await createProduct(payload, csrfToken)
