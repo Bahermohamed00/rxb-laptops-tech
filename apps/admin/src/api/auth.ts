@@ -1,3 +1,5 @@
+import { API_BASE_URL } from '../config/api-base.runtime'
+
 export interface AdminIdentity {
   id: string
   email: string
@@ -11,11 +13,13 @@ export interface AuthResponse {
   expiresAt?: string
 }
 
-const apiBase = (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:5185/api').replace(/\/$/, '')
+export class SessionRequestError extends Error {
+  constructor(message: string, readonly expired: boolean) { super(message); this.name = 'SessionRequestError' }
+}
 
 async function apiRequest(path: string, init: RequestInit = {}): Promise<Response> {
   try {
-    return await fetch(`${apiBase}${path}`, { ...init, credentials: 'include', headers: { 'Content-Type': 'application/json', ...init.headers } })
+    return await fetch(`${API_BASE_URL}${path}`, { ...init, credentials: 'include', headers: { 'Content-Type': 'application/json', ...init.headers } })
   } catch {
     throw new Error('The admin API could not be reached. Start the API and try again.')
   }
@@ -31,7 +35,9 @@ async function readResponse(response: Response): Promise<AuthResponse> {
 
 export async function getAdminSession(): Promise<AuthResponse> {
   const response = await apiRequest('/auth/session', { method: 'GET', headers: {} })
-  return readResponse(response)
+  if (response.status === 401) throw new SessionRequestError('The admin session has expired.', true)
+  if (!response.ok) throw new SessionRequestError(response.status >= 500 ? 'The admin service is temporarily unavailable.' : 'The admin session could not be checked.', false)
+  return response.json() as Promise<AuthResponse>
 }
 
 export async function signIn(email: string, password: string): Promise<AuthResponse> {
