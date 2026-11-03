@@ -16,12 +16,12 @@ const [{ Test }, { AppModule }, { PrismaService }, { configureApiApp }, { valida
   import('@nestjs/testing'), import('../.phase1-build/app.module.js'), import('../.phase1-build/prisma/prisma.service.js'),
   import('../.phase1-build/app-config.js'), import('../.phase1-build/config/environment.js'),
 ]);
-const [{ ProductsService }, { BadRequestException }] = await Promise.all([
+const [{ ProductsService }, { BadRequestException, ConflictException }] = await Promise.all([
   import('../.phase1-build/features/products/products.service.js'), import('@nestjs/common'),
 ]);
 
 const product = {
-  id: '9c490877-4e17-4f25-99da-a104c0803af1', slug: 'rxb-demo-laptop', productType: 'LAPTOP', brand: 'Demo', model: 'Laptop', description: 'Fixture only',
+  id: '9c490877-4e17-4f25-99da-a104c0803af1', slug: 'rxb-demo-laptop', productType: 'LAPTOP', brand: 'Demo', model: 'Laptop', serialNumber: 'RXB-DEMO-001', trackingMode: 'INDIVIDUAL', unitStatus: 'AVAILABLE', description: 'Fixture only',
   condition: 'NEW', conditionNotes: null, useCase: 'WORK', status: 'ACTIVE', currency: 'EGP', priceMinor: 100000,
   specs: {},
   cpu: 'Fixed CPU', gpu: 'Fixed GPU', baseRamGB: 16, baseRamType: 'DDR5', baseStorageGB: 512, baseStorageType: 'NVME',
@@ -58,6 +58,10 @@ test('product API publishes safe catalog fields and calculates prices from compa
 
   const anonymousAdmin = await fetch(`${base}/admin/products`);
   assert.equal(anonymousAdmin.status, 401);
+  const anonymousCategories = await fetch(`${base}/admin/categories`);
+  assert.equal(anonymousCategories.status, 401);
+  const anonymousCategoryWrite = await fetch(`${base}/admin/categories`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Unauthorized' }) });
+  assert.equal(anonymousCategoryWrite.status, 401);
   const anonymousWrite = await fetch(`${base}/admin/products`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
   assert.equal(anonymousWrite.status, 401);
   const anonymousUpload = await fetch(`${base}/admin/images`, { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: Buffer.from([1, 2, 3]) });
@@ -141,6 +145,21 @@ test('product creation requires base options matching the fixed laptop configura
   await assert.rejects(service.create(invalid), BadRequestException);
 });
 
+test('new laptop registration requires a real serial and maps duplicate serial constraints to a clear conflict', async () => {
+  const input = {
+    slug: 'serialized-laptop', sku: 'DEMO-LAPTOP-01', brand: 'Demo', model: 'Laptop', condition: 'NEW', status: 'DRAFT', priceMinor: 100000,
+    cpu: 'CPU', gpu: 'GPU', baseRamGB: 16, baseRamType: 'DDR5', baseStorageGB: 512, baseStorageType: 'NVME',
+    ramOptions: [{ capacityGB: 16, type: 'DDR5', priceDeltaMinor: 0, isBase: true, isAvailable: true }],
+    storageOptions: [{ capacityGB: 512, type: 'NVME', priceDeltaMinor: 0, isBase: true, isAvailable: true }],
+    combinations: [{ ramCapacityGB: 16, ramType: 'DDR5', storageCapacityGB: 512, storageType: 'NVME', isAvailable: true }],
+  };
+  const noSerial = new ProductsService({}, {});
+  await assert.rejects(noSerial.create(input), error => Boolean(error instanceof BadRequestException && error.getResponse().fieldErrors.serialNumber));
+  await assert.rejects(noSerial.create({ ...input, serialNumber: 'RXB-NEGATIVE-1', ramOptions: [{ ...input.ramOptions[0], priceDeltaMinor: -1 }] }), BadRequestException);
+  const duplicate = new ProductsService({ $transaction: callback => callback({ product: { create: async () => { throw { code: 'P2002', meta: { target: ['serialNumberNormalized'] } }; } } }) }, {});
+  await assert.rejects(duplicate.create({ ...input, serialNumber: 'rxb-duplicate-1' }), error => Boolean(error instanceof ConflictException && error.getResponse().fieldErrors.serialNumber));
+});
+
 test('valid product creation persists one laptop record and product-scoped upgrade options atomically', async () => {
   let persisted;
   const tx = {
@@ -153,7 +172,7 @@ test('valid product creation persists one laptop record and product-scoped upgra
   const prisma = { $transaction: callback => callback(tx) };
   const service = new ProductsService(prisma, {});
   const created = await service.create({
-    slug: 'new-laptop', brand: 'Demo', model: 'New Laptop', description: '', condition: 'NEW', useCase: 'GAMING', status: 'DRAFT', priceMinor: 100000,
+    slug: 'new-laptop', sku: 'DEMO-LAPTOP-02', brand: 'Demo', model: 'New Laptop', serialNumber: 'rxb-new-001', description: '', condition: 'NEW', useCase: 'GAMING', status: 'DRAFT', priceMinor: 100000,
     cpu: 'Fixed CPU', gpu: 'Fixed GPU', baseRamGB: 16, baseRamType: 'DDR5', baseStorageGB: 512, baseStorageType: 'NVME', stockQuantity: 1,
     ramOptions: [{ capacityGB: 16, type: 'DDR5', priceDeltaMinor: 0, isBase: true, isAvailable: true }],
     storageOptions: [{ capacityGB: 512, type: 'NVME', priceDeltaMinor: 0, isBase: true, isAvailable: true }],
@@ -161,6 +180,11 @@ test('valid product creation persists one laptop record and product-scoped upgra
   });
   assert.equal(created.slug, 'new-laptop');
   assert.equal(persisted.cpu, 'Fixed CPU');
+  assert.equal(persisted.serialNumber, 'rxb-new-001');
+  assert.equal(persisted.serialNumberNormalized, 'RXB-NEW-001');
+  assert.equal(persisted.trackingMode, 'INDIVIDUAL');
+  assert.equal(persisted.unitStatus, 'AVAILABLE');
+  assert.equal(persisted.stockQuantity, 1);
   assert.equal(persisted.gpu, 'Fixed GPU');
   assert.equal(persisted.useCase, 'GAMING');
   assert.equal(persisted.ramOptions.create.length, 1);
@@ -176,14 +200,16 @@ test('accessory products persist their type-specific specs without laptop-only f
       findUniqueOrThrow: async () => ({ ...product, ...persisted, images: [], ramOptions: [], storageOptions: [], combinations: [] }),
     },
   };
-  const service = new ProductsService({ $transaction: callback => callback(tx) }, {});
+  const service = new ProductsService({ accessoryCategory: { findUnique: async () => ({ id: '9c490877-4e17-4f25-99da-a104c0803af1', isActive: true }) }, $transaction: callback => callback(tx) }, {});
   const created = await service.create({
-    slug: 'rxb-keyboard', productType: 'KEYBOARD', brand: 'RXB', model: 'Mechanical Keyboard', description: 'A real catalog listing.',
+    slug: 'rxb-keyboard', sku: 'RXB-KEYBOARD-01', accessoryCategoryId: '9c490877-4e17-4f25-99da-a104c0803af1', productType: 'KEYBOARD', brand: 'RXB', model: 'Mechanical Keyboard', description: 'A real catalog listing.',
     condition: 'NEW', status: 'ACTIVE', priceMinor: 125000, stockQuantity: 3,
     specs: { keyboardType: 'Mechanical', connection: 'Wired', layout: 'EN+AR', backlight: 'RGB' },
   });
   assert.equal(created.productType, 'KEYBOARD');
   assert.equal(persisted.productType, 'KEYBOARD');
+  assert.equal(persisted.accessoryCategoryId, '9c490877-4e17-4f25-99da-a104c0803af1');
+  assert.equal(persisted.skuNormalized, 'RXB-KEYBOARD-01');
   assert.equal(persisted.cpu, null);
   assert.equal(persisted.gpu, null);
   assert.equal(persisted.baseRamGB, null);
@@ -196,7 +222,7 @@ test('accessory products persist their type-specific specs without laptop-only f
 test('accessory specifications are validated by product type and reject unsupported fields or values', async () => {
   const service = new ProductsService({}, {});
   const base = {
-    slug: 'rxb-mouse', productType: 'MOUSE', brand: 'RXB', model: 'Wireless Mouse', description: 'A real catalog listing.',
+    slug: 'rxb-mouse', sku: 'RXB-MOUSE-01', accessoryCategoryId: '9c490877-4e17-4f25-99da-a104c0803af1', productType: 'MOUSE', brand: 'RXB', model: 'Wireless Mouse', description: 'A real catalog listing.',
     condition: 'NEW', status: 'ACTIVE', priceMinor: 100000, stockQuantity: 1,
   };
   await assert.rejects(service.create({ ...base, specs: { connection: 'Bluetooth', dpi: 1600, buttonCount: 6, color: 'Black' } }), BadRequestException);
@@ -233,6 +259,7 @@ test('accessory product quotes are rejected instead of applying laptop upgrade p
 
 test('product edits replace supported options and compatible pairs in one transaction', async () => {
   const calls = [];
+  let productUpdateData;
   const updated = { ...product, slug: 'updated-laptop', images: [] };
   const tx = {
     productUpgradeCombination: { deleteMany: async () => { calls.push('delete-combinations'); }, createMany: async ({ data }) => { calls.push(['create-combinations', data]); } },
@@ -241,7 +268,7 @@ test('product edits replace supported options and compatible pairs in one transa
     productImage: { updateMany: async () => ({ count: 0 }) },
     product: {
       findUniqueOrThrow: async () => ({ ...updated, ramOptions: product.ramOptions, storageOptions: product.storageOptions, combinations: product.combinations }),
-      update: async ({ data }) => { Object.assign(updated, { slug: data.slug, status: data.status }); return updated; },
+      update: async ({ data }) => { productUpdateData = data; Object.assign(updated, { slug: data.slug, status: data.status }); return updated; },
     },
   };
   const prisma = {
@@ -258,6 +285,7 @@ test('product edits replace supported options and compatible pairs in one transa
     combinations: [{ ramCapacityGB: 16, ramType: 'DDR5', storageCapacityGB: 512, storageType: 'NVME', isAvailable: true }],
   });
   assert.equal(result.slug, 'updated-laptop');
+  assert.equal('stockQuantity' in productUpdateData, false);
   assert.deepEqual(calls.slice(0, 3), ['delete-combinations', 'delete-ram', 'delete-storage']);
   assert.deepEqual(calls[3], ['create-combinations', [{ productId: product.id, ramCapacityGB: 16, ramType: 'DDR5', storageCapacityGB: 512, storageType: 'NVME', isAvailable: true }]]);
 });
@@ -301,7 +329,8 @@ test('product edits attach the gallery in order and remove images dropped from i
 
 test('product deletion strategy archives the record instead of removing its history', async () => {
   let update;
-  const service = new ProductsService({ product: { update: async args => { update = args; return { id: product.id, status: 'ARCHIVED' }; } } }, {});
+  const prisma = { $transaction: callback => callback({ product: { update: async args => { update = args; return { id: product.id, status: 'ARCHIVED' }; } } }) };
+  const service = new ProductsService(prisma, {});
   const result = await service.archive(product.id);
   assert.equal(result.status, 'ARCHIVED');
   assert.deepEqual(update, { where: { id: product.id }, data: { status: 'ARCHIVED' } });
@@ -335,6 +364,31 @@ test('Admin product search applies database filters, sorting, and pagination bef
   assert.deepEqual(listArguments.orderBy, [{ priceMinor: 'asc' }, { id: 'asc' }]);
 });
 
+test('Admin product search scopes laptop conditions and rejects conflicting family filters', async () => {
+  let where;
+  const service = new ProductsService({ product: { count: async args => { where = args.where; return 0; }, findMany: async () => [] }, $transaction: operations => Promise.all(operations) }, {});
+  await service.adminList({ family: 'LAPTOP', condition: 'NEW', page: 1, pageSize: 12 });
+  assert.equal(where.productType, 'LAPTOP');
+  assert.equal(where.condition, 'NEW');
+  await service.adminList({ family: 'ACCESSORY', accessoryCategoryId: 'category-id', stockStatus: 'IN_STOCK', page: 1, pageSize: 12 });
+  assert.deepEqual(where.productType, { not: 'LAPTOP' });
+  assert.equal(where.accessoryCategoryId, 'category-id');
+  assert.deepEqual(where.stockQuantity, { gt: 0 });
+  await assert.rejects(service.adminList({ family: 'ACCESSORY', productType: 'LAPTOP', page: 1, pageSize: 12 }), BadRequestException);
+});
+
+test('new accessories require an active database category and cannot submit a stale or missing category', async () => {
+  const base = {
+    slug: 'category-required-keyboard', sku: 'RXB-CATEGORY-01', productType: 'KEYBOARD', brand: 'RXB', model: 'Keyboard',
+    condition: 'NEW', status: 'DRAFT', priceMinor: 100000, stockQuantity: 1,
+    specs: { keyboardType: 'Mechanical', connection: 'Wired', layout: 'EN', backlight: 'None' },
+  };
+  const noCategory = new ProductsService({}, {});
+  await assert.rejects(noCategory.create(base), error => error instanceof BadRequestException && Boolean(error.getResponse().fieldErrors.accessoryCategoryId));
+  const inactiveCategory = new ProductsService({ accessoryCategory: { findUnique: async () => ({ id: 'inactive', isActive: false }) } }, {});
+  await assert.rejects(inactiveCategory.create({ ...base, accessoryCategoryId: 'inactive' }), error => error instanceof BadRequestException && Boolean(error.getResponse().fieldErrors.accessoryCategoryId));
+});
+
 test('inventory changes require a reason and atomically record the previous/new quantity and acting admin', async () => {
   let adjustment;
   let updateFilter;
@@ -346,6 +400,7 @@ test('inventory changes require a reason and atomically record the previous/new 
       findUniqueOrThrow: async () => updated,
     },
     inventoryAdjustment: { create: async ({ data }) => { adjustment = data; } },
+    auditEvent: { create: async () => {} },
   };
   const prisma = { $transaction: callback => callback(tx) };
   const service = new ProductsService(prisma, {});
@@ -356,4 +411,24 @@ test('inventory changes require a reason and atomically record the previous/new 
     productId: product.id, adminUserId: '4c456728-493d-4283-b5db-5e3cd67f21a1',
     previousQuantity: 2, newQuantity: 5, reason: 'Physical count correction',
   });
+});
+
+test('individual laptop transition is reasoned, transactional, audited, and cannot be repeated', async () => {
+  let state = { id: product.id, slug: product.slug, productType: 'LAPTOP', trackingMode: 'INDIVIDUAL', unitStatus: 'AVAILABLE', stockQuantity: 1 };
+  let audit;
+  const tx = {
+    product: {
+      findUnique: async () => ({ ...state }),
+      updateMany: async ({ where, data }) => { if (state.unitStatus !== where.unitStatus || state.stockQuantity !== where.stockQuantity) return { count: 0 }; state = { ...state, ...data }; return { count: 1 }; },
+      findUniqueOrThrow: async () => state,
+    },
+    auditEvent: { create: async ({ data }) => { audit = data; } },
+  };
+  const service = new ProductsService({ $transaction: callback => callback(tx) }, {});
+  const result = await service.transitionUnit(product.id, { status: 'SOLD', reason: '  Customer purchase recorded  ' }, '4c456728-493d-4283-b5db-5e3cd67f21a1');
+  assert.equal(result.unitStatus, 'SOLD');
+  assert.equal(result.stockQuantity, 0);
+  assert.equal(audit.action, 'SOLD');
+  assert.equal(audit.reason, 'Customer purchase recorded');
+  await assert.rejects(service.transitionUnit(product.id, { status: 'SOLD', reason: 'Duplicate attempt' }, '4c456728-493d-4283-b5db-5e3cd67f21a1'), ConflictException);
 });

@@ -22,32 +22,9 @@ export function useEntrance(root: RefObject<HTMLDivElement | null>, view: View, 
       }
       reveal('[data-motion="page-heading"]', .2)
       if (view === 'Dashboard') {
-        reveal('.hero-topline', .28, { y: 0 })
-        reveal('[data-motion="hero-line"]', .32, { y: 22, stagger: .09 })
-        reveal('.hero-copy > p', .48)
-        reveal('.hero-copy > .button', .58, { y: 8 })
-        reveal('[data-motion="schematic"]', .54, { y: 0 })
-        reveal('[data-part="grid"]', .58, { y: 0 })
-        reveal('[data-part="layer"]', .65, { y: 18, stagger: .09 })
-        reveal('[data-part="core"]', .82, { y: 20, duration: .6 })
-        const paths = root.current?.querySelectorAll<SVGPathElement>('[data-part="connection"]') ?? []
-        paths.forEach((path, index) => {
-          const length = path.getTotalLength()
-          tl.fromTo(path, { strokeDasharray: length, strokeDashoffset: length }, { strokeDashoffset: 0, duration: .5, clearProps: 'strokeDasharray,strokeDashoffset' }, .85 + index * .06)
-        })
-        reveal('[data-part="marker"]', 1.02, { y: 0, stagger: .05 })
-        const signals = root.current?.querySelectorAll<SVGPathElement>('[data-part="signal"]') ?? []
-        signals.forEach((path, index) => {
-          const length = path.getTotalLength()
-          tl.fromTo(path, { opacity: 0, strokeDasharray: `12 ${length}`, strokeDashoffset: 12 }, { opacity: .85, duration: .12 }, 1.02 + index * .06)
-          tl.to(path, { strokeDashoffset: -length, duration: .55, ease: 'power1.inOut' }, 1.05 + index * .06)
-          tl.to(path, { opacity: 0, duration: .12 }, 1.48 + index * .06)
-        })
-        reveal('.hero-foot, .schematic-label', .95, { y: 0 })
-        reveal('[data-motion="connection-panel"]', .82, { x: 12, y: 0 })
-        reveal('.section-heading', .9)
-        reveal('[data-motion="workspace-card"]', .98, { y: window.matchMedia('(max-width: 760px)').matches ? 8 : 16, stagger: .065 })
-        reveal('.preview-note', 1.15, { y: 0 })
+        reveal('.dashboard-welcome', .28, { y: 8 })
+        reveal('.dashboard-metric', .34, { y: 12, stagger: .07 })
+        reveal('.dashboard-card', .5, { y: 10, stagger: .07 })
       } else if (view === 'Products') {
         reveal('.products-intro', .27, { y: 10 })
         reveal('.products-surface', .34, { y: 10 })

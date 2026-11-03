@@ -1,6 +1,6 @@
-﻿import { sections, type View } from './navigation'
+import { productViews, sections, type View } from './navigation'
 
-const views: readonly View[] = [...sections, 'Sign in']
+const views: readonly View[] = [...sections, ...productViews, 'Sign in']
 export function viewHash(view: View): string {
   return `#/${view.toLowerCase().replaceAll(' ', '-')}`
 }
@@ -13,6 +13,7 @@ export function productIdFromHash(hash: string): string | null {
   try { return decodeURIComponent(match[1]) } catch { return null }
 }
 export function hashView(hash: string): View {
-  if (productIdFromHash(hash)) return 'Products'
+  if (productIdFromHash(hash)) return 'All Products'
+  if (hash.toLowerCase() === '#/products') return 'All Products'
   return views.find(view => viewHash(view) === hash.toLowerCase()) ?? 'Dashboard'
 }

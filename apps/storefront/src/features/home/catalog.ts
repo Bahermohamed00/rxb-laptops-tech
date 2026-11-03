@@ -5,6 +5,7 @@ export function formatEgp(priceMinor: number, currency: string) {
 }
 
 export function productTypeLabel(product: StoreProduct) {
+  if (product.productType !== 'LAPTOP' && product.accessoryCategory?.name) return product.accessoryCategory.name
   switch (product.productType) {
     case 'LAPTOP': return 'Laptop'
     case 'KEYBOARD': return 'Keyboard'

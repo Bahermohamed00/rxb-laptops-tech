@@ -26,11 +26,19 @@ const [{ Test }, { AppModule }, { PrismaService }, { configureApiApp }, { valida
   import('../.phase1-build/auth/auth.service.js'),
 ]);
 
+function browserCookieForPath(setCookie, requestPath) {
+  const cookiePath = setCookie.match(/(?:^|;)\s*Path=([^;]+)/i)?.[1] ?? '/';
+  const pathMatches = requestPath === cookiePath
+    || requestPath.startsWith(cookiePath.endsWith('/') ? cookiePath : `${cookiePath}/`);
+  return pathMatches ? setCookie.split(';', 1)[0] : undefined;
+}
+
 test('health, admin sessions, authorization, CORS, environment, and login limits', async t => {
   const passwordHash = await argon2.hash('test-admin-password', { type: argon2.argon2id, memoryCost: 19_456, timeCost: 2, parallelism: 1 });
   const admin = { id: 'd5d0f7c0-8136-4e7b-a932-a11653ec389a', email: 'admin@example.test', passwordHash, role: AdminRole.SUPER_ADMIN, status: 'ACTIVE', lastLoginAt: null };
   const sessions = new Map();
   const fakePrisma = {
+    $queryRaw: async () => [{ '?column?': 1 }],
     adminUser: {
       findUnique: async ({ where }) => where.email === admin.email ? admin : null,
       update: async ({ data }) => Object.assign(admin, data),
@@ -52,6 +60,12 @@ test('health, admin sessions, authorization, CORS, environment, and login limits
       },
       update: async ({ where, data }) => Object.assign(sessions.get(where.id), data),
     },
+    product: {
+      count: async ({ where } = {}) => where?.status === 'ACTIVE' ? 4 : where?.trackingMode === 'INDIVIDUAL' ? 2 : where && Object.keys(where).length === 0 ? 0 : 5,
+      aggregate: async () => ({ _sum: { stockQuantity: 15 } }),
+      findMany: async () => [],
+    },
+    $transaction: async operations => Promise.all(operations),
   };
 
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
@@ -73,9 +87,19 @@ test('health, admin sessions, authorization, CORS, environment, and login limits
     assert.deepEqual(await response.json(), { status: 'ok' });
   });
 
+  await t.test('readiness endpoint checks database connectivity separately from liveness', async () => {
+    const response = await request('/ready');
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { status: 'ready' });
+  });
+
   await t.test('protected session route rejects anonymous requests', async () => {
     const response = await request('/auth/session');
     assert.equal(response.status, 401);
+    const auditResponse = await request('/admin/products/audit');
+    assert.equal(auditResponse.status, 401);
+    const overviewResponse = await request('/admin/dashboard/overview');
+    assert.equal(overviewResponse.status, 401);
   });
 
   await t.test('login rejects disallowed origins and unexpected body fields', async () => {
@@ -104,6 +128,17 @@ test('health, admin sessions, authorization, CORS, environment, and login limits
     assert.match(cookie, /SameSite=Lax/i);
     assert.match(cookie, /Path=\/api;/i);
     assert.doesNotMatch(cookie, /Secure/i, 'test mode is not production');
+    const browserCookie = browserCookieForPath(cookie, '/api/admin/products');
+    assert.ok(browserCookie, 'browser should send the session cookie to /api/admin/products');
+    const adminProducts = await request('/admin/products', { headers: { Cookie: browserCookie } });
+    assert.equal(adminProducts.status, 200);
+    assert.deepEqual(await adminProducts.json(), { items: [], total: 0, page: 1, pageSize: 12 });
+    const overviewResponse = await request('/admin/dashboard/overview', { headers: { Cookie: browserCookie } });
+    assert.equal(overviewResponse.status, 200);
+    const overview = await overviewResponse.json();
+    assert.deepEqual(overview.products, { total: 5, active: 4 });
+    assert.deepEqual(overview.inventory, { availableUnits: 17, legacyQuantityUnits: 15, individuallyTrackedAvailableUnits: 2 });
+    assert.match(overview.unavailable.salesAndRevenue, /No persisted order/);
     const token = cookie.split(';')[0].split('=').slice(1).join('=');
     assert.equal([...sessions.values()].at(-1).tokenHash, createHash('sha256').update(token).digest('hex'));
     return { cookie: cookie.split(';')[0], csrfToken: body.csrfToken, sessionId: [...sessions.keys()].at(-1) };
@@ -126,6 +161,12 @@ test('health, admin sessions, authorization, CORS, environment, and login limits
   });
 
   await t.test('logout requires CSRF, revokes the session, and clears the cookie', async () => {
+    const originRejected = await fetch(`${baseUrl}/api/auth/logout`, {
+      method: 'POST',
+      headers: { Origin: 'https://evil.example', Cookie: validSession.cookie, 'Content-Type': 'application/json', 'X-CSRF-Token': validSession.csrfToken },
+      body: '{}',
+    });
+    assert.equal(originRejected.status, 403);
     const csrfRejected = await request('/auth/logout', { method: 'POST', headers: { Cookie: validSession.cookie, 'Content-Type': 'application/json' }, body: '{}' });
     assert.equal(csrfRejected.status, 403);
     const response = await request('/auth/logout', { method: 'POST', headers: { Cookie: validSession.cookie, 'Content-Type': 'application/json', 'X-CSRF-Token': validSession.csrfToken }, body: '{}' });
@@ -149,13 +190,39 @@ test('health, admin sessions, authorization, CORS, environment, and login limits
     const preflight = await fetch(`${baseUrl}/api/auth/login`, { method: 'OPTIONS', headers: { Origin: origin, 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'content-type,x-csrf-token' } });
     assert.equal(preflight.headers.get('access-control-allow-origin'), origin);
     assert.equal(preflight.headers.get('access-control-allow-credentials'), 'true');
+    const publicPreflight = await fetch(`${baseUrl}/api/public/products`, { method: 'OPTIONS', headers: { Origin: origin, 'Access-Control-Request-Method': 'GET' } });
+    assert.equal(publicPreflight.headers.get('access-control-allow-origin'), origin);
+    assert.equal(publicPreflight.headers.get('access-control-allow-credentials'), null);
     const rejected = await fetch(`${baseUrl}/api/auth/login`, { method: 'OPTIONS', headers: { Origin: 'https://evil.example', 'Access-Control-Request-Method': 'POST' } });
     assert.equal(rejected.headers.get('access-control-allow-origin'), null);
+    assert.equal(rejected.status, 403);
   });
 
   await t.test('environment config rejects wildcard CORS and invalid rate values', () => {
     assert.throws(() => validateEnvironment({ ...process.env, CORS_ORIGINS: '*' }), /CORS_ORIGINS/);
     assert.throws(() => validateEnvironment({ ...process.env, API_RATE_LIMIT: 'not-a-number' }), /API_RATE_LIMIT/);
+    assert.throws(() => validateEnvironment({ ...process.env, DATABASE_URL: 'postgresql:/user:pass@127.0.0.1:5432/rxb_test?schema=public' }), /PostgreSQL host/);
+    assert.throws(() => validateEnvironment({ ...process.env, DATABASE_URL: 'postgresql://user:pass@127.0.0.1:5432/rxb_test?schema=public#fragment' }), /fragment/);
+    const encodedCredentials = 'postgresql://test-user:p%40ss%23%25@127.0.0.1:5432/rxb_test?schema=public';
+    assert.equal(validateEnvironment({ ...process.env, DATABASE_URL: encodedCredentials }).DATABASE_URL, encodedCredentials);
+    assert.throws(() => validateEnvironment({ ...process.env, CLOUDINARY_API_KEY: 'partial' }), /configured together/);
+    assert.throws(() => validateEnvironment({
+      ...process.env,
+      NODE_ENV: 'production',
+      CORS_ORIGINS: 'https://admin.example.test',
+      CLOUDINARY_CLOUD_NAME: '',
+      CLOUDINARY_API_KEY: '',
+      CLOUDINARY_API_SECRET: '',
+    }), /Cloudinary credentials/);
+    const production = validateEnvironment({
+      ...process.env,
+      NODE_ENV: 'production',
+      CORS_ORIGINS: 'https://shop.example.test,https://admin.example.test',
+      CLOUDINARY_CLOUD_NAME: 'rxb-test',
+      CLOUDINARY_API_KEY: 'test-key',
+      CLOUDINARY_API_SECRET: 'test-secret',
+    });
+    assert.equal(production.CLOUDINARY_CLOUD_NAME, 'rxb-test');
     assert.equal(validateEnvironment({ ...process.env, AUTH_LOGIN_LIMIT: undefined }).AUTH_LOGIN_LIMIT, 5);
     assert.throws(() => validateEnvironment({ ...process.env, NODE_ENV: 'production', CORS_ORIGINS: 'http://127.0.0.1:5184' }), /HTTPS/);
   });

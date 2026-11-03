@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { ProductRequestError, type ApiProduct, type ProductPayload, type ProductSpecs, type ProductType, type UpgradeCombination } from './products.api'
-import { createProduct, updateProduct } from './products.api'
+import { ProductRequestError, type AccessoryCategory, type ApiProduct, type ProductPayload, type ProductSpecs, type ProductType, type UpgradeCombination } from './products.api'
+import { changeLaptopHardware, createProduct, listAccessoryCategories, updateProduct } from './products.api'
 import { ProductImageUpload } from './ProductImageUpload'
 import { accessorySpecs } from './accessory-specs'
 
 type OptionDraft = { capacityGB: string; type: string; price: string; isBase: boolean; isAvailable: boolean }
-type Draft = { slug: string; brand: string; model: string; condition: ''|'NEW'|'PRE_OWNED'; useCase: ''|'WORK'|'STUDY'|'GAMING'; status: 'DRAFT'|'ACTIVE'|'ARCHIVED'; price: string; cpu: string; gpu: string; ram: string; ramType: string; storage: string; storageType: string; stock: string; description: string; notes: string; screen: string; resolution: string; panel: string; refresh: string }
-const defaultDraft: Draft = { slug: '', brand: '', model: '', condition: '', useCase: '', status: 'DRAFT', price: '', cpu: '', gpu: '', ram: '', ramType: '', storage: '', storageType: '', stock: '', description: '', notes: '', screen: '', resolution: '', panel: '', refresh: '' }
+const EMPTY_CATEGORIES: AccessoryCategory[] = []
+type Draft = { slug: string; sku: string; brand: string; model: string; serialNumber: string; condition: ''|'NEW'|'PRE_OWNED'; useCase: ''|'WORK'|'STUDY'|'GAMING'; status: 'DRAFT'|'ACTIVE'|'ARCHIVED'; price: string; cpu: string; gpu: string; ram: string; ramType: string; storage: string; storageType: string; stock: string; description: string; notes: string; screen: string; resolution: string; panel: string; refresh: string }
+const defaultDraft: Draft = { slug: '', sku: '', brand: '', model: '', serialNumber: '', condition: '', useCase: '', status: 'DRAFT', price: '', cpu: '', gpu: '', ram: '', ramType: '', storage: '', storageType: '', stock: '', description: '', notes: '', screen: '', resolution: '', panel: '', refresh: '' }
 const money = (minor: number) => `${Math.floor(minor / 100)}.${String(minor % 100).padStart(2, '0')}`
 function optionsFrom(product: ApiProduct | undefined, kind: 'ram'|'storage'): OptionDraft[] {
   const source = kind === 'ram' ? product?.ramOptions : product?.storageOptions
@@ -15,14 +16,16 @@ function optionsFrom(product: ApiProduct | undefined, kind: 'ram'|'storage'): Op
 }
 function draftFrom(product?: ApiProduct): Draft {
   if (!product) return defaultDraft
-  return { slug: product.slug, brand: product.brand, model: product.model, condition: product.condition, useCase: product.useCase ?? '', status: product.status, price: money(product.priceMinor), cpu: product.cpu ?? '', gpu: product.gpu ?? '', ram: product.baseRamGB === null ? '' : String(product.baseRamGB), ramType: product.baseRamType ?? '', storage: product.baseStorageGB === null ? '' : String(product.baseStorageGB), storageType: product.baseStorageType ?? '', stock: String(product.stockQuantity), description: product.description, notes: product.conditionNotes ?? '', screen: product.displaySizeInches ? String(product.displaySizeInches) : '', resolution: product.displayResolution ?? '', panel: product.displayPanel ?? '', refresh: product.refreshRateHz ? String(product.refreshRateHz) : '' }
+  return { slug: product.slug, sku: product.sku ?? '', brand: product.brand, model: product.model, serialNumber: product.serialNumber ?? '', condition: product.condition, useCase: product.useCase ?? '', status: product.status, price: money(product.priceMinor), cpu: product.cpu ?? '', gpu: product.gpu ?? '', ram: product.baseRamGB === null ? '' : String(product.baseRamGB), ramType: product.baseRamType ?? '', storage: product.baseStorageGB === null ? '' : String(product.baseStorageGB), storageType: product.baseStorageType ?? '', stock: String(product.stockQuantity), description: product.description, notes: product.conditionNotes ?? '', screen: product.displaySizeInches ? String(product.displaySizeInches) : '', resolution: product.displayResolution ?? '', panel: product.displayPanel ?? '', refresh: product.refreshRateHz ? String(product.refreshRateHz) : '' }
 }
 function minor(value: string) { if (!/^\d+(?:\.\d{1,2})?$/.test(value.trim())) return NaN; const [whole, fraction = ''] = value.trim().split('.'); return Number(whole) * 100 + Number(fraction.padEnd(2, '0')) }
 const combinationKey = (ramCapacityGB: number, ramType: string, storageCapacityGB: number, storageType: string) => `${ramCapacityGB}:${ramType}/${storageCapacityGB}:${storageType}`
 
-export function LiveProductEditor({ product, initialProductType = 'LAPTOP', csrfToken, onCancel, onSaved, cancelLabel = 'Cancel' }: { product?: ApiProduct; initialProductType?: ProductType; csrfToken: string; onCancel: () => void; onSaved: (product: ApiProduct) => void; cancelLabel?: string }) {
-  const [draft, setDraft] = useState(() => draftFrom(product))
+export function LiveProductEditor({ product, initialProductType = 'LAPTOP', initialCondition, categories: suppliedCategories = EMPTY_CATEGORIES, lockProductType = false, csrfToken, onCancel, onSaved, cancelLabel = 'Cancel' }: { product?: ApiProduct; initialProductType?: ProductType; initialCondition?: 'NEW'|'PRE_OWNED'; categories?: AccessoryCategory[]; lockProductType?: boolean; csrfToken: string; onCancel: () => void; onSaved: (product: ApiProduct) => void; cancelLabel?: string }) {
+  const [draft, setDraft] = useState(() => product ? draftFrom(product) : { ...defaultDraft, condition: initialCondition ?? '' })
   const [productType, setProductType] = useState<ProductType>(() => product?.productType ?? initialProductType)
+  const [categoryId, setCategoryId] = useState(product?.accessoryCategoryId ?? product?.accessoryCategory?.id ?? '')
+  const [categories, setCategories] = useState(suppliedCategories)
   const [specsDraft, setSpecsDraft] = useState<Record<string, string>>(() => Object.fromEntries(
     Object.entries(product?.specs ?? {}).map(([key, value]) => [key, String(value)]),
   ))
@@ -37,7 +40,9 @@ export function LiveProductEditor({ product, initialProductType = 'LAPTOP', csrf
   const formRef = useRef<HTMLFormElement>(null)
   const initialSnapshot = useRef<string | null>(null)
   const skipNavigationGuard = useRef(false)
-  const snapshot = JSON.stringify({ draft, productType, specsDraft, ramOptions, storageOptions, combinations, imageIds: images.map(image => image.id) })
+  useEffect(() => { if (!suppliedCategories.length) void listAccessoryCategories().then(setCategories).catch(() => setCategories([])) }, [suppliedCategories])
+  const snapshotOf = () => JSON.stringify({ draft, productType, categoryId, specsDraft, ramOptions, storageOptions, combinations, imageIds: images.map(image => image.id) })
+  const snapshot = snapshotOf()
   if (initialSnapshot.current === null) initialSnapshot.current = snapshot
   const isDirty = snapshot !== initialSnapshot.current
   useEffect(() => {
@@ -106,25 +111,29 @@ export function LiveProductEditor({ product, initialProductType = 'LAPTOP', csrf
     const laptop = productType === 'LAPTOP'
     const priceMinor = minor(draft.price)
     const ram = Number(draft.ram), storage = Number(draft.storage), stock = Number(draft.stock)
-    const slug = (draft.slug.trim() || `${draft.brand}-${draft.model}`).toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+    const serialSuffix = !product && laptop && draft.serialNumber.trim() ? `-${crypto.randomUUID().slice(0, 8)}` : ''
+    const slug = (draft.slug.trim() || `${draft.brand}-${draft.model}${serialSuffix}`).toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
     const errors: Record<string, string> = {}
     if (!draft.brand.trim()) errors.brand = 'Brand is required.'
     if (!draft.model.trim()) errors.model = 'Product name is required.'
-    if (!draft.condition) errors.condition = 'Choose whether this product is new or pre-owned.'
+    if (!draft.condition && !initialCondition) errors.condition = 'Choose whether this product is new or pre-owned.'
+    if (!/^[A-Za-z0-9][A-Za-z0-9._/-]{0,79}$/.test(draft.sku.trim())) errors.sku = 'Enter a valid SKU using letters, numbers, dot, underscore, slash, or hyphen.'
     if (!Number.isSafeInteger(priceMinor) || priceMinor < 1 || priceMinor > 1_000_000_000) errors.price = 'Enter a valid price greater than zero, with up to two decimal places.'
-    if (!Number.isSafeInteger(stock) || stock < 0 || stock > 1_000_000) errors.stock = 'Enter a non-negative whole-number quantity up to 1,000,000.'
+    if (!product && !laptop && (!Number.isSafeInteger(stock) || stock < 0 || stock > 1_000_000)) errors.stock = 'Enter a non-negative whole-number quantity up to 1,000,000.'
     if (!slug) errors.slug = 'Enter a product name and brand that produce a valid URL slug.'
     if (laptop) {
+      if (!product && !draft.serialNumber.trim()) errors.serialNumber = 'Enter the real serial number printed on this laptop.'
       if (!draft.cpu.trim()) errors.cpu = 'Enter the installed processor.'
       if (!draft.gpu.trim()) errors.gpu = 'Enter installed graphics, or specify integrated graphics.'
       if (!Number.isSafeInteger(ram) || ram < 1 || ram > 4096) errors.baseRamGB = 'Enter a whole-number RAM capacity from 1 to 4,096 GB.'
       if (!draft.ramType) errors.baseRamType = 'Select the installed base RAM type.'
       if (!Number.isSafeInteger(storage) || storage < 1 || storage > 131072) errors.baseStorageGB = 'Enter a whole-number storage capacity from 1 to 131,072 GB.'
       if (!draft.storageType) errors.baseStorageType = 'Select the installed base storage type.'
-      if (draft.screen && (!Number.isSafeInteger(Number(draft.screen)) || Number(draft.screen) < 1 || Number(draft.screen) > 100)) errors.displaySizeInches = 'Enter a whole-number screen size from 1 to 100 inches.'
+      if (draft.screen && (!Number.isFinite(Number(draft.screen)) || !/^\d+(?:\.\d{1,2})?$/.test(draft.screen) || Number(draft.screen) < 1 || Number(draft.screen) > 100)) errors.displaySizeInches = 'Enter a screen size from 1 to 100 inches, up to two decimal places.'
     }
     const accessorySpecValues: ProductSpecs = {}
     if (!laptop) {
+      if (!categoryId || !categories.some(category => category.id === categoryId && (category.isActive || category.id === product?.accessoryCategoryId))) errors.accessoryCategoryId = 'Choose an active accessory category.'
       for (const field of accessorySpecs[productType]) {
         const value = (specsDraft[field.key] ?? '').trim()
         const errorKey = `specs.${field.key}`
@@ -174,7 +183,7 @@ export function LiveProductEditor({ product, initialProductType = 'LAPTOP', csrf
     }
     try {
       const payload: ProductPayload = {
-        slug, productType, brand: draft.brand.trim(), model: draft.model.trim(), description: draft.description, condition: draft.condition === 'NEW' ? 'NEW' : 'PRE_OWNED',
+        slug, sku: draft.sku.trim(), accessoryCategoryId: laptop ? null : categoryId, productType, brand: draft.brand.trim(), model: draft.model.trim(), ...(laptop && !product ? { serialNumber: draft.serialNumber.trim() } : {}), description: draft.description, condition: (draft.condition || initialCondition) === 'NEW' ? 'NEW' : 'PRE_OWNED',
         conditionNotes: draft.notes || undefined, useCase: laptop ? draft.useCase || null : null, status: draft.status, priceMinor,
         ...(laptop ? {
           cpu: draft.cpu.trim(), gpu: draft.gpu.trim(), baseRamGB: ram, baseRamType: draft.ramType,
@@ -182,7 +191,7 @@ export function LiveProductEditor({ product, initialProductType = 'LAPTOP', csrf
           displaySizeInches: draft.screen ? Number(draft.screen) : undefined, displayResolution: draft.resolution || undefined,
           displayPanel: draft.panel || undefined, refreshRateHz: draft.refresh ? Number(draft.refresh) : undefined,
         } : {}),
-        stockQuantity: stock,
+        ...(product ? {} : { stockQuantity: laptop ? 1 : stock }),
         specs: laptop ? {} : accessorySpecValues,
         imageIds: images.map(image => image.id), ramOptions: [], storageOptions: [], combinations: [],
       }
@@ -227,6 +236,19 @@ export function LiveProductEditor({ product, initialProductType = 'LAPTOP', csrf
     finally { setSaving(false) }
   }
 
+  async function recordHardwareChange() {
+    if (!product || product.productType !== 'LAPTOP' || saving) return
+    const reason = window.prompt('Describe the physical RAM, storage, CPU, or graphics change that was performed.')?.trim()
+    if (!reason) return
+    setSaving(true); setError(''); setFieldErrors({})
+    try {
+      const saved = await changeLaptopHardware(product.id, { cpu: draft.cpu.trim(), gpu: draft.gpu.trim(), baseRamGB: Number(draft.ram), baseRamType: draft.ramType, baseStorageGB: Number(draft.storage), baseStorageType: draft.storageType, reason }, csrfToken)
+      initialSnapshot.current = snapshotOf()
+      onSaved(saved)
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Hardware change could not be recorded.') }
+    finally { setSaving(false) }
+  }
+
   function optionList(kind: 'ram'|'storage', items: OptionDraft[], setItems: (next: OptionDraft[]) => void, types: string[]) {
     return <fieldset className="live-options" name={`${kind}Options`} tabIndex={-1}><legend>{kind === 'ram' ? 'Supported RAM options' : 'Supported storage options'}</legend><p>Compatibility is specific to this product. Price difference is added to the base configuration.</p>{fieldError(`${kind}Options`)}
       {items.map((option, index) => <div className="live-option-row" key={`${kind}-${index}`}>
@@ -256,11 +278,14 @@ export function LiveProductEditor({ product, initialProductType = 'LAPTOP', csrf
       <fieldset><legend>Basic information</legend><div className="live-form-grid">
         <label>Brand<input name="brand" aria-invalid={Boolean(fieldErrors.brand)} aria-describedby={fieldErrors.brand ? 'field-error-brand' : undefined} required maxLength={80} autoComplete="organization" value={draft.brand} onChange={event => change('brand', event.target.value)} placeholder="e.g. Dell" />{fieldError('brand')}</label>
         <label>Product name / model<input name="model" aria-invalid={Boolean(fieldErrors.model)} aria-describedby={fieldErrors.model ? 'field-error-model' : undefined} required maxLength={160} value={draft.model} onChange={event => change('model', event.target.value)} placeholder={isLaptop ? 'e.g. Latitude 5440' : 'e.g. Wireless mechanical keyboard'} />{fieldError('model')}</label>
-        <label>Product type<select name="productType" value={productType} onChange={event => { setProductType(event.target.value as ProductType); setSpecsDraft({}); setFieldErrors({}) }}>{[['LAPTOP', 'Laptop'], ['KEYBOARD', 'Keyboard'], ['MOUSE', 'Mouse'], ['MOUSE_PAD', 'Mouse Pad'], ['OTHER_ACCESSORY', 'Other accessory']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+        {isLaptop && !product && <label>Physical laptop serial number<input name="serialNumber" aria-invalid={Boolean(fieldErrors.serialNumber)} maxLength={120} value={draft.serialNumber} onChange={event => change('serialNumber', event.target.value)} placeholder="Enter the number printed on the device" />{fieldError('serialNumber')}</label>}
+        <label>SKU<input name="sku" aria-invalid={Boolean(fieldErrors.sku)} aria-describedby={fieldErrors.sku ? 'field-error-sku' : undefined} maxLength={80} value={draft.sku} onChange={event => change('sku', event.target.value)} placeholder="Unique stock keeping code" />{fieldError('sku')}</label>
+        <label>Product type<select name="productType" disabled={lockProductType} value={productType} onChange={event => { setProductType(event.target.value as ProductType); setCategoryId(''); setSpecsDraft({}); setFieldErrors({}) }}>{[['LAPTOP', 'Laptop'], ['KEYBOARD', 'Keyboard'], ['MOUSE', 'Mouse'], ['MOUSE_PAD', 'Mouse Pad'], ['OTHER_ACCESSORY', 'Other accessory']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         <label>Condition<select name="condition" aria-invalid={Boolean(fieldErrors.condition)} aria-describedby={fieldErrors.condition ? 'field-error-condition' : undefined} required value={draft.condition} onChange={event => change('condition', event.target.value as Draft['condition'])}><option value="">Choose condition</option><option value="NEW">New</option><option value="PRE_OWNED">Pre-owned</option></select>{fieldError('condition')}</label>
         {isLaptop && <label>Laptop use case<select value={draft.useCase} onChange={event => change('useCase', event.target.value as Draft['useCase'])}><option value="">Uncategorized</option><option value="WORK">Work</option><option value="STUDY">Study</option><option value="GAMING">Gaming</option></select></label>}
+        {!isLaptop && <label>Accessory category<select name="accessoryCategoryId" aria-invalid={Boolean(fieldErrors.accessoryCategoryId)} aria-describedby={fieldErrors.accessoryCategoryId ? 'field-error-accessoryCategoryId' : undefined} required value={categoryId} onChange={event => { setCategoryId(event.target.value); setFieldErrors(current => { const { accessoryCategoryId: _removed, ...rest } = current; return rest }) }}><option value="">Choose an active category</option>{categories.filter(category => category.isActive || category.id === product?.accessoryCategoryId).map(category => <option key={category.id} value={category.id}>{category.name}{category.isActive ? '' : ' · archived (existing assignment)'}</option>)}</select>{categories.length === 0 && <small>No categories are available. <a href="#/categories">Create a category</a> before saving an accessory.</small>}{fieldError('accessoryCategoryId')}</label>}
         <label>Price (EGP)<input name="price" aria-invalid={Boolean(fieldErrors.price || fieldErrors.priceMinor)} aria-describedby={fieldErrors.price || fieldErrors.priceMinor ? 'field-error-price' : undefined} required inputMode="decimal" value={draft.price} onChange={event => change('price', event.target.value)} placeholder="Enter the confirmed price" />{fieldError('price')}</label>
-        <label>Available quantity<input name="stock" aria-invalid={Boolean(fieldErrors.stock || fieldErrors.stockQuantity)} aria-describedby={fieldErrors.stock || fieldErrors.stockQuantity ? 'field-error-stock' : undefined} required type="number" min="0" value={draft.stock} onChange={event => change('stock', event.target.value)} placeholder="Enter the counted quantity" />{fieldError('stock')}</label>
+        {product ? <label>Inventory quantity<input value={String(product.stockQuantity)} readOnly /><small>Use Inventory to change stock with a recorded reason.</small></label> : !isLaptop && <label>Available quantity<input name="stock" aria-invalid={Boolean(fieldErrors.stock || fieldErrors.stockQuantity)} aria-describedby={fieldErrors.stock || fieldErrors.stockQuantity ? 'field-error-stock' : undefined} required type="number" min="0" value={draft.stock} onChange={event => change('stock', event.target.value)} placeholder="Enter the counted quantity" />{fieldError('stock')}</label>}
         <label>Listing status<select value={draft.status} onChange={event => change('status', event.target.value as Draft['status'])}><option value="DRAFT">Draft (not public)</option><option value="ACTIVE">Published</option><option value="ARCHIVED">Archived</option></select></label>
         <label>Condition notes<input maxLength={1000} value={draft.notes} onChange={event => change('notes', event.target.value)} /></label>
         <label className="live-field-wide">Short description<textarea name="description" aria-invalid={Boolean(fieldErrors.description)} aria-describedby={fieldErrors.description ? 'field-error-description' : undefined} rows={3} maxLength={10000} value={draft.description} onChange={event => change('description', event.target.value)} placeholder={isLaptop ? 'A short, accurate summary of this laptop.' : 'Describe the accessory and its supported features.'} />{fieldError('description')}</label>
@@ -286,7 +311,7 @@ export function LiveProductEditor({ product, initialProductType = 'LAPTOP', csrf
           <label>Base RAM type<select name="baseRamType" aria-invalid={Boolean(fieldErrors.baseRamType)} aria-describedby={fieldErrors.baseRamType ? 'field-error-baseRamType' : undefined} value={draft.ramType} onChange={event => change('ramType', event.target.value)}><option value="">Select RAM type</option>{['DDR4','DDR5','LPDDR4X','LPDDR5','LPDDR5X','OTHER'].map(type => <option key={type}>{type}</option>)}</select>{fieldError('baseRamType')}</label>
           <label>Base storage capacity (GB)<input name="baseStorageGB" aria-invalid={Boolean(fieldErrors.baseStorageGB)} aria-describedby={fieldErrors.baseStorageGB ? 'field-error-baseStorageGB' : undefined} type="number" min="1" max="131072" value={draft.storage} onChange={event => change('storage', event.target.value)} />{fieldError('baseStorageGB')}</label>
           <label>Base storage type<select name="baseStorageType" aria-invalid={Boolean(fieldErrors.baseStorageType)} aria-describedby={fieldErrors.baseStorageType ? 'field-error-baseStorageType' : undefined} value={draft.storageType} onChange={event => change('storageType', event.target.value)}><option value="">Select storage type</option>{['SSD','HDD','NVME','SATA','OTHER'].map(type => <option key={type}>{type}</option>)}</select>{fieldError('baseStorageType')}</label>
-          <label>Screen size (inches)<input name="displaySizeInches" aria-invalid={Boolean(fieldErrors.displaySizeInches)} aria-describedby={fieldErrors.displaySizeInches ? 'field-error-displaySizeInches' : undefined} type="number" min="1" max="100" step="1" value={draft.screen} onChange={event => change('screen', event.target.value)} />{fieldError('displaySizeInches')}</label>
+          <label>Screen size (inches)<input name="displaySizeInches" aria-invalid={Boolean(fieldErrors.displaySizeInches)} aria-describedby={fieldErrors.displaySizeInches ? 'field-error-displaySizeInches' : undefined} type="number" min="1" max="100" step="0.1" value={draft.screen} onChange={event => change('screen', event.target.value)} />{fieldError('displaySizeInches')}</label>
           <label>Resolution<input value={draft.resolution} onChange={event => change('resolution', event.target.value)} /></label>
           <label>Panel type<input value={draft.panel} onChange={event => change('panel', event.target.value)} /></label>
           <label>Refresh rate (Hz)<input type="number" min="1" value={draft.refresh} onChange={event => change('refresh', event.target.value)} /></label>
@@ -302,7 +327,7 @@ export function LiveProductEditor({ product, initialProductType = 'LAPTOP', csrf
       })}</div>)}</div></div></fieldset>
       </details>}
       {error && <p className="live-product-error" role="alert">{error}</p>}
-      <div className="live-editor-actions"><button type="button" className="button button-quiet" onClick={cancel} disabled={saving}>{cancelLabel}</button><button type="submit" className="button button-primary" disabled={saving}>{saving ? 'Saving…' : product ? 'Save changes' : 'Create product'}</button></div>
+      <div className="live-editor-actions"><button type="button" className="button button-quiet" onClick={cancel} disabled={saving}>{cancelLabel}</button>{product?.productType === 'LAPTOP' && <button type="button" className="button button-quiet" onClick={() => void recordHardwareChange()} disabled={saving}>Record physical hardware change</button>}<button type="submit" className="button button-primary" disabled={saving}>{saving ? 'Saving…' : product ? 'Save changes' : 'Create product'}</button></div>
     </form>
   </section>
 }

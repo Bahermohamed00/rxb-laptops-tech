@@ -1,11 +1,11 @@
 import { Type } from 'class-transformer';
-import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsInt, IsNotEmpty, IsNumber, IsObject, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsNotEmpty, IsNumber, IsObject, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, ValidateNested } from 'class-validator';
 
 export class RamOptionDto {
   @IsOptional() @IsUUID() id?: string;
   @Type(() => Number) @IsInt() @Min(1) @Max(4096) capacityGB!: number;
   @IsIn(['DDR4', 'DDR5', 'LPDDR4X', 'LPDDR5', 'LPDDR5X', 'OTHER']) type!: 'DDR4'|'DDR5'|'LPDDR4X'|'LPDDR5'|'LPDDR5X'|'OTHER';
-  @Type(() => Number) @IsInt() @Min(-1_000_000_000) @Max(1_000_000_000) priceDeltaMinor!: number;
+  @Type(() => Number) @IsInt() @Min(0) @Max(1_000_000_000) priceDeltaMinor!: number;
   @IsBoolean() isBase!: boolean;
   @IsBoolean() isAvailable!: boolean;
 }
@@ -14,7 +14,7 @@ export class StorageOptionDto {
   @IsOptional() @IsUUID() id?: string;
   @Type(() => Number) @IsInt() @Min(1) @Max(131072) capacityGB!: number;
   @IsIn(['SSD', 'HDD', 'NVME', 'SATA', 'OTHER']) type!: 'SSD'|'HDD'|'NVME'|'SATA'|'OTHER';
-  @Type(() => Number) @IsInt() @Min(-1_000_000_000) @Max(1_000_000_000) priceDeltaMinor!: number;
+  @Type(() => Number) @IsInt() @Min(0) @Max(1_000_000_000) priceDeltaMinor!: number;
   @IsBoolean() isBase!: boolean;
   @IsBoolean() isAvailable!: boolean;
 }
@@ -31,8 +31,11 @@ export class ProductDto {
   @IsString() @IsNotEmpty() @Matches(/^[a-z0-9]+(?:-[a-z0-9]+)*$/) @MaxLength(180) slug!: string;
   @IsOptional() @IsIn(['LAPTOP', 'KEYBOARD', 'MOUSE', 'MOUSE_PAD', 'OTHER_ACCESSORY'])
   productType: 'LAPTOP'|'KEYBOARD'|'MOUSE'|'MOUSE_PAD'|'OTHER_ACCESSORY' = 'LAPTOP';
+  @IsOptional() @IsString() @Matches(/^[A-Za-z0-9][A-Za-z0-9._/-]{0,79}$/) sku?: string;
+  @IsOptional() @IsUUID() accessoryCategoryId?: string | null;
   @IsString() @IsNotEmpty() @MaxLength(80) brand!: string;
   @IsString() @IsNotEmpty() @MaxLength(160) model!: string;
+  @IsOptional() @IsString() @Matches(/^[A-Za-z0-9][A-Za-z0-9._/-]{0,119}$/) serialNumber?: string;
   @IsOptional() @IsString() @MaxLength(10000) description?: string;
   @IsIn(['NEW', 'PRE_OWNED']) condition!: 'NEW'|'PRE_OWNED';
   @IsOptional() @IsString() @MaxLength(1000) conditionNotes?: string;
@@ -46,11 +49,11 @@ export class ProductDto {
   @IsOptional() @IsIn(['DDR4', 'DDR5', 'LPDDR4X', 'LPDDR5', 'LPDDR5X', 'OTHER']) baseRamType?: RamOptionDto['type'];
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(131072) baseStorageGB?: number;
   @IsOptional() @IsIn(['SSD', 'HDD', 'NVME', 'SATA', 'OTHER']) baseStorageType?: StorageOptionDto['type'];
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) displaySizeInches?: number;
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(1) @Max(100) displaySizeInches?: number;
   @IsOptional() @IsString() @MaxLength(80) displayResolution?: string;
   @IsOptional() @IsString() @MaxLength(80) displayPanel?: string;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(1000) refreshRateHz?: number;
-  @Type(() => Number) @IsInt() @Min(0) @Max(1_000_000) stockQuantity!: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(1_000_000) stockQuantity?: number;
   @IsOptional() @IsUUID() imageId?: string;
   @IsOptional() @IsArray() @ArrayMaxSize(12) @IsUUID(undefined, { each: true }) imageIds?: string[];
   @IsOptional() @IsArray() @ArrayMaxSize(100) @ValidateNested({ each: true }) @Type(() => RamOptionDto) ramOptions: RamOptionDto[] = [];
@@ -68,10 +71,39 @@ export class UpdateInventoryDto {
   @IsString() @IsNotEmpty() @MaxLength(500) reason!: string;
 }
 
+export class UnitTransitionDto {
+  @IsIn(['SOLD', 'REMOVED']) status!: 'SOLD'|'REMOVED';
+  @IsString() @IsNotEmpty() @MaxLength(500) reason!: string;
+}
+
+export class AuditPageDto {
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(1000000) page = 1;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) pageSize = 25;
+  @IsOptional() @IsString() @MaxLength(80) action?: string;
+  @IsOptional() @IsIn(['SUCCESS', 'FAILURE']) outcome?: string;
+  @IsOptional() @IsString() @MaxLength(254) administrator?: string;
+  @IsOptional() @IsString() @MaxLength(120) entityId?: string;
+  @IsOptional() @IsDateString() from?: string;
+  @IsOptional() @IsDateString() to?: string;
+}
+
+export class HardwareChangeDto {
+  @IsOptional() @IsString() @MaxLength(200) cpu?: string;
+  @IsOptional() @IsString() @MaxLength(200) gpu?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(4096) baseRamGB?: number;
+  @IsOptional() @IsIn(['DDR4', 'DDR5', 'LPDDR4X', 'LPDDR5', 'LPDDR5X', 'OTHER']) baseRamType?: RamOptionDto['type'];
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(131072) baseStorageGB?: number;
+  @IsOptional() @IsIn(['SSD', 'HDD', 'NVME', 'SATA', 'OTHER']) baseStorageType?: StorageOptionDto['type'];
+  @IsString() @IsNotEmpty() @MaxLength(500) reason!: string;
+}
+
 export class ProductSearchDto {
   @IsOptional() @IsString() @MaxLength(120) q?: string;
   @IsOptional() @IsIn(['LAPTOP', 'KEYBOARD', 'MOUSE', 'MOUSE_PAD', 'OTHER_ACCESSORY'])
   productType?: 'LAPTOP'|'KEYBOARD'|'MOUSE'|'MOUSE_PAD'|'OTHER_ACCESSORY';
+  @IsOptional() @IsIn(['LAPTOP', 'ACCESSORY']) family?: 'LAPTOP'|'ACCESSORY';
+  @IsOptional() @IsIn(['IN_STOCK', 'OUT_OF_STOCK']) stockStatus?: 'IN_STOCK'|'OUT_OF_STOCK';
+  @IsOptional() @IsUUID() accessoryCategoryId?: string;
   @IsOptional() @IsIn(['NEW', 'PRE_OWNED']) condition?: 'NEW'|'PRE_OWNED';
   @IsOptional() @IsIn(['DRAFT', 'ACTIVE', 'ARCHIVED']) status?: 'DRAFT'|'ACTIVE'|'ARCHIVED';
   @IsOptional() @IsIn(['WORK', 'STUDY', 'GAMING', 'UNCATEGORIZED']) useCase?: 'WORK'|'STUDY'|'GAMING'|'UNCATEGORIZED';

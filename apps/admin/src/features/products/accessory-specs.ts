@@ -31,7 +31,6 @@ export const accessorySpecs: Record<AccessoryProductType, readonly AccessoryFiel
     { key: 'color', label: 'Color', kind: 'text', required: true, max: 80, placeholder: 'e.g. Black' },
   ],
   OTHER_ACCESSORY: [
-    { key: 'categoryName', label: 'Category name', kind: 'text', required: true, max: 80, placeholder: 'e.g. Headset, Webcam, Bag' },
     { key: 'additionalNotes', label: 'Additional notes', kind: 'text', required: false, max: 500, placeholder: 'Optional product details' },
   ],
 }

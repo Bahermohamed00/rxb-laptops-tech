@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { CardIcon, HeadsetIcon, ShieldIcon, TruckIcon } from '../../components/icons'
 import { SiteFooter } from '../../components/SiteFooter'
 import { ThemeToggle } from '../../components/ThemeToggle'
@@ -14,15 +14,22 @@ const reasons = [
 
 export function AboutPage({ theme, onToggleTheme }: { theme: Theme; onToggleTheme: () => void }) {
   const [menuOpen, setMenuOpen] = useState(false)
+  const menuToggle = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    if (!menuOpen) return
+    const onKeyDown = (event: WindowEventMap['keydown']) => { if (event.key === 'Escape') { setMenuOpen(false); menuToggle.current?.focus() } }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [menuOpen])
   return <main className="site site-ready about-page">
     <div className="announcement"><span className="status-dot" /> RXB LAPTOPS &amp; TECH</div>
     <header className="site-header">
       <div className="header wrap">
         <a className="wordmark" href="/" aria-label="RXB Laptops and Tech home"><img className="wordmark-logo" src="/rxb-logo-transparent.png" alt="" /><span className="wordmark-caption">LAPTOPS <i>/</i> TECH</span></a>
-        <nav className={`main-nav ${menuOpen ? 'main-nav-open' : ''}`} aria-label="Main navigation">
-          <a href="/">Home</a><a href="/#laptops">Laptops</a><a href="/#parts">Parts</a><a href="/about" aria-current="page">About</a>
+        <nav id="storefront-primary-navigation" className={`main-nav ${menuOpen ? 'main-nav-open' : ''}`} aria-label="Main navigation">
+          <a href="/" onClick={() => setMenuOpen(false)}>Home</a><a href="/#laptops" onClick={() => setMenuOpen(false)}>Laptops</a><a href="/#parts" onClick={() => setMenuOpen(false)}>Parts</a><a href="/about" aria-current="page" onClick={() => setMenuOpen(false)}>About</a>
         </nav>
-        <div className="header-tools"><ThemeToggle theme={theme} onToggle={onToggleTheme} /><button className="mobile-menu-toggle" type="button" aria-label={menuOpen ? 'Close navigation menu' : 'Open navigation menu'} aria-expanded={menuOpen} onClick={() => setMenuOpen(open => !open)}><span /><span /><span /></button></div>
+        <div className="header-tools"><ThemeToggle theme={theme} onToggle={onToggleTheme} /><button ref={menuToggle} className="mobile-menu-toggle" type="button" aria-label={menuOpen ? 'Close navigation menu' : 'Open navigation menu'} aria-expanded={menuOpen} aria-controls="storefront-primary-navigation" onClick={() => setMenuOpen(open => !open)}><span /><span /><span /></button></div>
       </div>
     </header>
     <section className="about-hero wrap" aria-labelledby="about-title">

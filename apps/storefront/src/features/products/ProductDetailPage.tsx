@@ -30,7 +30,7 @@ export function ProductDetailPage({ product, onClose }: { product: StoreProduct;
   const baseStorage = product.storageOptions.find(option => option.isBase) ?? product.storageOptions[0]
   const [ramId, setRamId] = useState(baseRam?.id ?? '')
   const [storageId, setStorageId] = useState(baseStorage?.id ?? '')
-  const [quote, setQuote] = useState<{ currency: string; priceMinor: number } | null>(null)
+  const [quote, setQuote] = useState<{ currency: string; priceMinor: number; ramOptionId: string; storageOptionId: string } | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [details, setDetails] = useState<StoreProduct | null>(null)
@@ -117,10 +117,12 @@ export function ProductDetailPage({ product, onClose }: { product: StoreProduct;
   const selectedRam = details?.ramOptions.find(option => option.id === ramId)
   const selectedStorage = details?.storageOptions.find(option => option.id === storageId)
   const isBaseConfiguration = Boolean(selectedRam?.isBase && selectedStorage?.isBase)
-  const inquiryPrice = quote ?? (details && (!isLaptop || isBaseConfiguration) ? { currency: details.currency, priceMinor: details.priceMinor } : null)
-  const productTypeLabel = shownProduct.productType === 'OTHER_ACCESSORY'
+  const quoteMatchesSelection = Boolean(quote && quote.ramOptionId === ramId && quote.storageOptionId === storageId)
+  const currentQuote = quoteMatchesSelection ? quote : null
+  const inquiryPrice = currentQuote ?? (details && (!isLaptop || isBaseConfiguration) ? { currency: details.currency, priceMinor: details.priceMinor } : null)
+  const productTypeLabel = shownProduct.productType === 'LAPTOP' ? 'Laptop' : shownProduct.accessoryCategory?.name || (shownProduct.productType === 'OTHER_ACCESSORY'
     ? 'Other accessory'
-    : shownProduct.productType.replaceAll('_', ' ').toLowerCase().replace(/\b\w/g, letter => letter.toUpperCase())
+    : shownProduct.productType.replaceAll('_', ' ').toLowerCase().replace(/\b\w/g, letter => letter.toUpperCase()))
   const productUrl = details ? new URL(`/products/${encodeURIComponent(details.slug)}`, window.location.origin).toString() : ''
   const whatsappHref = details && inquiryPrice && (!isLaptop || (selectedRam && selectedStorage))
     ? whatsappUrl(productInquiryMessage(
@@ -131,6 +133,7 @@ export function ProductDetailPage({ product, onClose }: { product: StoreProduct;
         : null,
       inquiryPrice.currency,
       inquiryPrice.priceMinor,
+      isLaptop && details && selectedRam && selectedStorage ? { base: details.priceMinor, ramDelta: selectedRam.priceDeltaMinor, storageDelta: selectedStorage.priceDeltaMinor } : undefined,
     ))
     : ''
   const displaySummary = [
@@ -176,7 +179,7 @@ export function ProductDetailPage({ product, onClose }: { product: StoreProduct;
   ]).filter(spec => spec.value)
   const descriptionLines = shownProduct.description.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
   const totalLabel = isLaptop
-    ? detailsLoading ? 'Loading details…' : loading ? 'Updating price…' : quote ? formatEgp(quote.priceMinor, quote.currency) : 'Price unavailable'
+    ? detailsLoading ? 'Loading details…' : loading ? 'Updating price…' : inquiryPrice ? formatEgp(inquiryPrice.priceMinor, inquiryPrice.currency) : 'Price unavailable'
     : detailsLoading ? 'Loading product…' : inquiryPrice ? formatEgp(inquiryPrice.priceMinor, inquiryPrice.currency) : 'Price unavailable'
 
   function optionGroup(kind: 'ram' | 'storage') {

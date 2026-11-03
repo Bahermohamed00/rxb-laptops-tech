@@ -12,6 +12,12 @@ export function installAdminSessionMock({ products: productFixtures = [] } = {})
       }), { status: 200, headers: { 'Content-Type': 'application/json' } })
     }
     if (url.endsWith('/auth/logout') && init?.method === 'POST') return new Response(null, { status: 204 })
+    if (new URL(url, 'http://localhost').pathname.endsWith('/admin/categories') && (!init?.method || init.method === 'GET')) {
+      return new Response(JSON.stringify([{ id: 'category-accessories', name: 'Keyboards', normalizedName: 'keyboards', slug: 'keyboards', description: '', imageUrl: null, isActive: true, productCount: 0 }]), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }
+    if (new URL(url, 'http://localhost').pathname.endsWith('/admin/dashboard/overview') && (!init?.method || init.method === 'GET')) {
+      return new Response(JSON.stringify({ generatedAt: new Date().toISOString(), products: { total: 5, active: 4 }, inventory: { availableUnits: 7, legacyQuantityUnits: 5, individuallyTrackedAvailableUnits: 2 }, unavailable: { salesAndRevenue: 'No persisted order, payment, or refund records are available.', lowStock: 'No low-stock threshold is configured.' } }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }
     if (new URL(url, 'http://localhost').pathname.endsWith('/admin/products') && init?.method === 'POST') {
       if (new Headers(init.headers).get('X-CSRF-Token') !== 'test-csrf-token') return new Response('{}', { status: 403 })
       createdPayload = JSON.parse(init.body)

@@ -1,9 +1,19 @@
-﻿export const sections = ['Dashboard', 'Products', 'Inventory', 'Orders', 'Customers', 'Reports'] as const
+export const sections = ['Dashboard', 'Products', 'Inventory', 'Audit', 'Orders', 'Customers', 'Reports'] as const
 export type Section = (typeof sections)[number]
-export type View = Section | 'Sign in'
+export const productViews = ['All Products', 'New Laptops', 'Pre-owned Laptops', 'Accessories', 'Categories'] as const
+export type ProductView = (typeof productViews)[number]
+export type View = Section | ProductView | 'Sign in'
 export type Navigate = (view: View) => void
 
+export const navigationGroups = [
+  { label: 'Overview', items: ['Dashboard'] },
+  { label: 'Products', items: productViews },
+  { label: 'Catalog & operations', items: ['Inventory', 'Audit'] },
+  { label: 'Business workspace', items: ['Orders', 'Customers', 'Reports'] },
+] as const satisfies readonly { label: string; items: readonly View[] }[]
+
 export const workspaceContent = {
+  Audit: { label: 'Administrative history', title: 'Audit history', description: 'Read-only administrative event history.', empty: 'No audit events have been recorded.', detail: 'Administrative actions are recorded by the API.', dependency: 'Audit service', note: 'Events cannot be edited from the admin interface.' },
   Products: { label: 'The collection', title: 'Every machine.\nOne considered collection.', description: 'The home for your product catalog. Product records are unavailable until a backend is connected.', empty: 'Your collection starts here.', detail: 'No product data is connected to this preview. This space does not represent an empty or published catalog.', dependency: 'Product service', note: 'Product names, specifications, and prices will need a connected source before they can be displayed.' },
   Inventory: { label: 'Stock visibility', title: 'A clearer view\nof what’s available.', description: 'A dedicated space for inventory. Availability cannot be determined without a connected inventory source.', empty: 'Inventory is not connected.', detail: 'Stock levels are unavailable. No quantities or availability indicators are inferred in this preview.', dependency: 'Inventory service', note: 'Inventory data must come from a connected source before availability can be shown.' },
   Orders: { label: 'Order workspace', title: 'A place for\nevery order.', description: 'Your order workspace, prepared for a future connection. No transactions are available in this preview.', empty: 'Orders are not connected.', detail: 'Order records and statuses are unavailable. This is a disconnected workspace, not a statement about order volume.', dependency: 'Order service', note: 'Order records require a backend connection and authorized access before they can be displayed.' },

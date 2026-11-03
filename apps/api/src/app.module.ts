@@ -13,6 +13,7 @@ import { RolesGuard } from './auth/guards/roles.guard.js';
 import { SessionGuard } from './auth/guards/session.guard.js';
 import { HealthController } from './health.controller.js';
 import { ProductsModule } from './features/products/products.module.js';
+import { DashboardModule } from './features/dashboard/dashboard.module.js';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { ProductsModule } from './features/products/products.module.js';
     }),
     PrismaModule,
     ProductsModule,
+    DashboardModule,
   ],
   controllers: [HealthController, AuthController],
   providers: [

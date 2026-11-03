@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { listAllProducts, updateInventoryQuantity, type ApiProduct } from '../products/products.api'
+import { listAllProducts, transitionLaptop, updateInventoryQuantity, type ApiProduct } from '../products/products.api'
 import { stockLevel } from './inventory.model'
 import './live-inventory.css'
 
@@ -35,6 +35,7 @@ export function LiveInventoryPage({ csrfToken }: { csrfToken: string }) {
   const totalStock = products.reduce((total, product) => total + product.stockQuantity, 0)
 
   async function save(product: ApiProduct) {
+    if (product.trackingMode === 'INDIVIDUAL') return
     const quantity = Number(quantities[product.id])
     if (!Number.isSafeInteger(quantity) || quantity < 0 || quantity > 1_000_000) { setError('Enter a whole quantity from 0 to 1,000,000.'); return }
     const reason = reasons[product.id]?.trim() ?? ''
@@ -49,6 +50,19 @@ export function LiveInventoryPage({ csrfToken }: { csrfToken: string }) {
     finally { setSaving(null) }
   }
 
+  async function transition(product: ApiProduct, status: 'SOLD'|'REMOVED') {
+    const reason = reasons[product.id]?.trim() ?? ''
+    if (!reason || reason.length > 500) { setError('Enter a reason for the sale or removal (1–500 characters).'); return }
+    setSaving(product.id); setError(''); setFeedback('')
+    try {
+      await transitionLaptop(product.id, status, reason, csrfToken)
+      setReasons(current => ({ ...current, [product.id]: '' }))
+      setFeedback(`${product.brand} ${product.model} marked ${status.toLowerCase()}.`)
+      await refresh()
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Inventory transition failed.') }
+    finally { setSaving(null) }
+  }
+
   return <section className="live-inventory" aria-labelledby="inventory-title">
     <header><div><span>DATABASE INVENTORY</span><h2 id="inventory-title">Physical catalog stock</h2><p>Each quantity counts complete items for its product. Laptop upgrade options do not create separate stock counts.</p></div><div className="live-inventory-actions"><span>On hand <strong data-inventory-total>{loading ? '—' : totalStock.toLocaleString('en-EG')}</strong></span><button className="button button-quiet" onClick={() => void refresh()} disabled={loading}>Refresh</button><button className="button button-primary" onClick={() => document.querySelector<HTMLInputElement>('.live-inventory-row input')?.focus()} disabled={!products.length}>Adjust stock</button></div></header>
     {feedback && <p className="inventory-feedback" role="status">{feedback}</p>}
@@ -57,9 +71,9 @@ export function LiveInventoryPage({ csrfToken }: { csrfToken: string }) {
       : !error && products.length === 0 ? <div className="live-inventory-empty"><strong>No active inventory records</strong><span>Add products in the catalog to manage available stock.</span></div>
       : <><div className="live-inventory-filters"><label>Search<input name="inventorySearch" type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Brand, model, or product details" /></label><label>Stock status<select name="stockFilter" value={stockFilter} onChange={event => setStockFilter(event.target.value)}><option value="all">All stock</option><option value="zero">Out of stock</option><option value="low">Low stock</option><option value="healthy">Healthy stock</option></select></label><label>Sort<select name="inventorySort" value={sort} onChange={event => setSort(event.target.value)}><option value="name">Name</option><option value="quantity-asc">Quantity: low to high</option><option value="quantity-desc">Quantity: high to low</option></select></label><span>{visibleProducts.length} of {products.length} records</span></div><div className="live-inventory-list">{visibleProducts.map(product => <article className="live-inventory-row" key={product.id}>
         <div className="live-inventory-identity"><span>{productTypeLabel(product)} · {product.brand} · {product.status} · {stockLevel(product.stockQuantity).toUpperCase()}</span><strong>{product.model}</strong><small>{product.condition === 'NEW' ? 'New' : 'Pre-owned'}{product.productType === 'LAPTOP' ? ` · ${product.cpu} · ${product.baseRamGB} GB RAM · ${product.baseStorageGB} GB ${product.baseStorageType}` : ''}</small></div>
-        <label>Available quantity<input name={`stock-${product.id}`} type="number" min="0" max="1000000" step="1" value={quantities[product.id] ?? ''} onChange={event => setQuantities(current => ({ ...current, [product.id]: event.target.value }))} /></label>
+        {product.trackingMode === 'INDIVIDUAL' ? <span>Serial {product.serialNumber} · {product.unitStatus ?? 'Unknown'}</span> : <label>Available quantity<input name={`stock-${product.id}`} type="number" min="0" max="1000000" step="1" value={quantities[product.id] ?? ''} onChange={event => setQuantities(current => ({ ...current, [product.id]: event.target.value }))} /></label>}
         <label>Reason for change<input name={`reason-${product.id}`} maxLength={500} value={reasons[product.id] ?? ''} onChange={event => setReasons(current => ({ ...current, [product.id]: event.target.value }))} /></label>
-        <button className="button button-primary" type="button" aria-label={`Save stock for ${product.model}`} disabled={saving !== null || quantities[product.id] === String(product.stockQuantity)} onClick={() => void save(product)}>{saving === product.id ? 'Saving…' : 'Save stock'}</button>
+        {product.trackingMode === 'INDIVIDUAL' ? product.unitStatus === 'AVAILABLE' && <><button className="button button-primary" type="button" disabled={saving !== null} onClick={() => void transition(product, 'SOLD')}>Mark sold</button><button className="button button-quiet" type="button" disabled={saving !== null} onClick={() => void transition(product, 'REMOVED')}>Remove</button></> : <button className="button button-primary" type="button" aria-label={`Save stock for ${product.model}`} disabled={saving !== null || quantities[product.id] === String(product.stockQuantity)} onClick={() => void save(product)}>{saving === product.id ? 'Saving…' : 'Save stock'}</button>}
       </article>)}{visibleProducts.length === 0 && <div className="live-inventory-empty"><strong>No matching inventory</strong><span>Try a different search or stock filter.</span></div>}</div></>}
   </section>
 }

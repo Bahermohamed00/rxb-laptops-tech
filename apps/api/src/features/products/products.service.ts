@@ -2,11 +2,11 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { PrismaService } from '../../prisma/prisma.service.js';
 import type { Prisma } from '../../generated/prisma-client/client.js';
 import { ProductSearchDto } from './products.dto.js';
-import type { ProductDto, UpdateInventoryDto } from './products.dto.js';
+import type { AuditPageDto, HardwareChangeDto, ProductDto, UnitTransitionDto, UpdateInventoryDto } from './products.dto.js';
 import { ImagesService } from '../images/images.service.js';
 
 const include = {
-  ramOptions: true, storageOptions: true, combinations: true,
+  ramOptions: true, storageOptions: true, combinations: true, accessoryCategory: true,
   images: { orderBy: [{ position: 'asc' }, { createdAt: 'asc' }] },
 } satisfies Prisma.ProductInclude;
 type ProductWithRelations = Prisma.ProductGetPayload<{ include: typeof include }>;
@@ -58,13 +58,14 @@ export class ProductsService {
         ...(!input.model.trim() ? { model: 'Product name and model are required.' } : {}),
       });
     }
-    if (!Number.isSafeInteger(input.priceMinor) || input.priceMinor < 1 || !Number.isSafeInteger(input.stockQuantity) || input.stockQuantity < 0) {
+    if (!Number.isSafeInteger(input.priceMinor) || input.priceMinor < 1 || (input.stockQuantity !== undefined && (!Number.isSafeInteger(input.stockQuantity) || input.stockQuantity < 0))) {
       invalidProduct('Correct the highlighted product fields.', {
         ...(!Number.isSafeInteger(input.priceMinor) || input.priceMinor < 1 ? { priceMinor: 'Enter a valid price greater than zero.' } : {}),
-        ...(!Number.isSafeInteger(input.stockQuantity) || input.stockQuantity < 0 ? { stockQuantity: 'Enter a non-negative whole-number quantity.' } : {}),
+        ...(input.stockQuantity !== undefined && (!Number.isSafeInteger(input.stockQuantity) || input.stockQuantity < 0) ? { stockQuantity: 'Enter a non-negative whole-number quantity.' } : {}),
       });
     }
     if (productType !== 'LAPTOP') {
+      if (!input.accessoryCategoryId) invalidProduct('Choose an accessory category.', { accessoryCategoryId: 'Select an active category for this accessory.' });
       const hasLaptopFields = input.useCase != null || Boolean(input.cpu?.trim()) || Boolean(input.gpu?.trim())
         || input.baseRamGB != null || input.baseRamType != null || input.baseStorageGB != null || input.baseStorageType != null
         || input.displaySizeInches != null || Boolean(input.displayResolution?.trim()) || Boolean(input.displayPanel?.trim())
@@ -75,6 +76,7 @@ export class ProductsService {
       });
       return this.validateAccessorySpecs(productType, input.specs ?? {});
     }
+    if (input.accessoryCategoryId) invalidProduct('Laptop products cannot be assigned to accessory categories.', { accessoryCategoryId: 'Remove the accessory category from this laptop.' });
     if (Object.keys(input.specs ?? {}).length) invalidProduct('Laptop products cannot have accessory specifications.', {
       specs: 'Remove accessory-only specifications from this laptop.',
     });
@@ -96,6 +98,8 @@ export class ProductsService {
     const ramOptions = input.ramOptions ?? [];
     const storageOptions = input.storageOptions ?? [];
     const combinationsInput = input.combinations ?? [];
+    if (ramOptions.some(option => !Number.isSafeInteger(option.priceDeltaMinor) || option.priceDeltaMinor < 0)) invalidProduct('Upgrade prices must be valid non-negative amounts.', { ramOptions: 'Enter a non-negative RAM upgrade price.' });
+    if (storageOptions.some(option => !Number.isSafeInteger(option.priceDeltaMinor) || option.priceDeltaMinor < 0)) invalidProduct('Upgrade prices must be valid non-negative amounts.', { storageOptions: 'Enter a non-negative storage upgrade price.' });
     const ramBase = ramOptions.filter(option => option.isBase);
     const storageBase = storageOptions.filter(option => option.isBase);
     if (ramBase.length !== 1 || storageBase.length !== 1) invalidProduct('Choose exactly one base option for RAM and storage.', {
@@ -182,11 +186,25 @@ export class ProductsService {
     }
   }
 
-  async create(input: ProductDto) {
+  private async requireActiveCategory(id?: string, allowInactiveId?: string | null) {
+    if (!id) invalidProduct('Choose an accessory category.', { accessoryCategoryId: 'Select an active category for this accessory.' });
+    const category = await this.prisma.accessoryCategory.findUnique({ where: { id } });
+    if (!category || (!category.isActive && id !== allowInactiveId)) invalidProduct('Choose an active accessory category.', { accessoryCategoryId: 'This category is unavailable. Choose an active category.' });
+  }
+
+  async create(input: ProductDto, adminUserId?: string) {
     const specs = this.validateOptions(input);
     const imageIds = await this.checkedImages(input);
     const productType = input.productType ?? 'LAPTOP';
     const laptop = productType === 'LAPTOP';
+    const serialNumber = input.serialNumber?.trim();
+    const serialNumberNormalized = serialNumber?.toUpperCase();
+    const sku = input.sku?.trim();
+    const skuNormalized = sku?.toUpperCase();
+    if (laptop && !serialNumber) invalidProduct('Register each physical laptop with its real serial number.', { serialNumber: 'Enter the serial number printed on this laptop.' });
+    if (!laptop && serialNumber) invalidProduct('Accessories do not use laptop serial numbers.', { serialNumber: 'Remove the laptop serial number.' });
+    if (!sku) invalidProduct('Enter a product SKU.', { sku: 'SKU is required for new products.' });
+    if (!laptop) await this.requireActiveCategory(input.accessoryCategoryId ?? undefined);
     const ramOptions = input.ramOptions ?? [];
     const storageOptions = input.storageOptions ?? [];
     const combinations = input.combinations ?? [];
@@ -194,7 +212,7 @@ export class ProductsService {
       const product = await this.prisma.$transaction(async tx => {
         const created = await tx.product.create({
         data: {
-          slug: input.slug.trim().toLowerCase(), productType, brand: input.brand.trim(), model: input.model.trim(), description: input.description?.trim() ?? '',
+          slug: input.slug.trim().toLowerCase(), sku, skuNormalized, accessoryCategoryId: laptop ? null : input.accessoryCategoryId, productType, brand: input.brand.trim(), model: input.model.trim(), serialNumber: serialNumber ?? null, serialNumberNormalized: serialNumberNormalized ?? null, trackingMode: laptop ? 'INDIVIDUAL' : 'LEGACY_QUANTITY', unitStatus: laptop ? 'AVAILABLE' : null, description: input.description?.trim() ?? '',
           condition: input.condition, conditionNotes: input.conditionNotes?.trim(), useCase: laptop ? input.useCase ?? null : null, status: input.status, priceMinor: input.priceMinor,
           specs,
           cpu: laptop ? input.cpu!.trim() : null, gpu: laptop ? input.gpu!.trim() : null,
@@ -202,12 +220,13 @@ export class ProductsService {
           baseStorageGB: laptop ? input.baseStorageGB! : null, baseStorageType: laptop ? input.baseStorageType! : null,
           displaySizeInches: laptop ? input.displaySizeInches ?? null : null,
           displayResolution: laptop ? input.displayResolution?.trim() ?? null : null, displayPanel: laptop ? input.displayPanel?.trim() ?? null : null, refreshRateHz: laptop ? input.refreshRateHz ?? null : null,
-          stockQuantity: input.stockQuantity,
+          stockQuantity: laptop ? 1 : input.stockQuantity ?? 0,
           ramOptions: { create: ramOptions.map(({ id: _id, ...option }) => option) },
           storageOptions: { create: storageOptions.map(({ id: _id, ...option }) => option) },
         }, include });
         if (combinations.length) await tx.productUpgradeCombination.createMany({ data: combinations.map(combination => ({ ...combination, productId: created.id })) });
         await this.attachImages(tx, created.id, imageIds);
+        if (adminUserId) await tx.auditEvent.create({ data: { adminUserId, action: 'PRODUCT_CREATED', entityType: 'PRODUCT', entityId: created.id, summary: `Created ${brandModel(input.brand, input.model)}`, changes: { productType, sku, accessoryCategoryId: laptop ? null : input.accessoryCategoryId!, serialNumber: serialNumber ?? null, status: input.status, priceMinor: input.priceMinor, imageCount: imageIds.length } } });
         return tx.product.findUniqueOrThrow({ where: { id: created.id }, include });
       });
       return this.adminProduct(product);
@@ -217,13 +236,22 @@ export class ProductsService {
     }
   }
 
-  async update(id: string, input: ProductDto) {
+  async update(id: string, input: ProductDto, adminUserId?: string) {
     const specs = this.validateOptions(input);
     const existing = await this.prisma.product.findUnique({ where: { id }, include });
     if (!existing) throw new NotFoundException('Product not found.');
+    if (existing.productType !== (input.productType ?? 'LAPTOP')) throw new ConflictException('Product type cannot be changed after registration. Create a separate catalog record for another product type.');
+    if (existing.productType === 'LAPTOP' && (input.productType ?? 'LAPTOP') === 'LAPTOP' && (
+      (input.cpu ?? null) !== existing.cpu || (input.gpu ?? null) !== existing.gpu ||
+      (input.baseRamGB ?? null) !== existing.baseRamGB || (input.baseRamType ?? null) !== existing.baseRamType ||
+      (input.baseStorageGB ?? null) !== existing.baseStorageGB || (input.baseStorageType ?? null) !== existing.baseStorageType
+    )) throw new BadRequestException('Installed hardware changes require the reasoned hardware-change operation.');
     const imageIds = await this.checkedImages(input, id);
     const productType = input.productType ?? 'LAPTOP';
     const laptop = productType === 'LAPTOP';
+    if (!laptop) await this.requireActiveCategory(input.accessoryCategoryId ?? existing.accessoryCategoryId ?? undefined, existing.accessoryCategoryId);
+    const sku = input.sku?.trim() ?? existing.sku ?? null;
+    const skuNormalized = sku?.toUpperCase() ?? null;
     const ramOptions = input.ramOptions ?? [];
     const storageOptions = input.storageOptions ?? [];
     const combinations = input.combinations ?? [];
@@ -235,7 +263,7 @@ export class ProductsService {
         await tx.productImage.updateMany({ where: { productId: id }, data: { productId: null, position: 0 } });
         await this.attachImages(tx, id, imageIds);
         const product = await tx.product.update({ where: { id }, data: {
-          slug: input.slug.trim().toLowerCase(), productType, brand: input.brand.trim(), model: input.model.trim(), description: input.description?.trim() ?? '',
+          slug: input.slug.trim().toLowerCase(), sku, skuNormalized, accessoryCategoryId: laptop ? null : input.accessoryCategoryId ?? existing.accessoryCategoryId, productType, brand: input.brand.trim(), model: input.model.trim(), description: input.description?.trim() ?? '',
           condition: input.condition, conditionNotes: input.conditionNotes?.trim(), useCase: laptop ? input.useCase ?? null : null, status: input.status, priceMinor: input.priceMinor,
           specs,
           cpu: laptop ? input.cpu!.trim() : null, gpu: laptop ? input.gpu!.trim() : null,
@@ -243,11 +271,12 @@ export class ProductsService {
           baseStorageGB: laptop ? input.baseStorageGB! : null, baseStorageType: laptop ? input.baseStorageType! : null,
           displaySizeInches: laptop ? input.displaySizeInches ?? null : null,
           displayResolution: laptop ? input.displayResolution?.trim() ?? null : null, displayPanel: laptop ? input.displayPanel?.trim() ?? null : null, refreshRateHz: laptop ? input.refreshRateHz ?? null : null,
-          stockQuantity: input.stockQuantity,
+          // Stock changes only through updateInventory, where the reason and actor are recorded.
           ramOptions: { create: ramOptions.map(({ id: _id, ...option }) => option) },
           storageOptions: { create: storageOptions.map(({ id: _id, ...option }) => option) },
         }, include });
         if (combinations.length) await tx.productUpgradeCombination.createMany({ data: combinations.map(combination => ({ ...combination, productId: id })) });
+        if (adminUserId) await tx.auditEvent.create({ data: { adminUserId, action: 'PRODUCT_UPDATED', entityType: 'PRODUCT', entityId: id, summary: `Updated ${brandModel(input.brand, input.model)}`, changes: productChanges(existing, input) } });
         return this.adminProduct(await tx.product.findUniqueOrThrow({ where: { id }, include }));
       });
       for (const image of existing.images) {
@@ -260,8 +289,12 @@ export class ProductsService {
     }
   }
 
-  async archive(id: string) {
-    try { return await this.prisma.product.update({ where: { id }, data: { status: 'ARCHIVED' } }); }
+  async archive(id: string, adminUserId?: string) {
+    try { return await this.prisma.$transaction(async tx => {
+      const product = await tx.product.update({ where: { id }, data: { status: 'ARCHIVED' } });
+      if (adminUserId) await tx.auditEvent.create({ data: { adminUserId, action: 'PRODUCT_ARCHIVED', entityType: 'PRODUCT', entityId: id, summary: `Archived ${brandModel(product.brand, product.model)}` } });
+      return product;
+    }); }
     catch (error) { if (isMissingError(error)) throw new NotFoundException('Product not found.'); throw error; }
   }
 
@@ -270,20 +303,95 @@ export class ProductsService {
     if (!reason) throw new BadRequestException('Enter a reason for this stock adjustment.');
     try {
       return await this.prisma.$transaction(async tx => {
-        const current = await tx.product.findUnique({ where: { id }, select: { stockQuantity: true } });
+        const current = await tx.product.findUnique({ where: { id }, select: { stockQuantity: true, trackingMode: true } });
         if (!current) throw new NotFoundException('Product not found.');
+        if (current.trackingMode === 'INDIVIDUAL') throw new BadRequestException('Individually tracked laptops must use the sale or removal action.');
         if (current.stockQuantity === input.stockQuantity) {
           return tx.product.findUniqueOrThrow({ where: { id }, select: { id: true, slug: true, stockQuantity: true, status: true, updatedAt: true } });
         }
         const changed = await tx.product.updateMany({ where: { id, stockQuantity: current.stockQuantity }, data: { stockQuantity: input.stockQuantity } });
         if (changed.count !== 1) throw new ConflictException('Inventory changed. Refresh and try again.');
         await tx.inventoryAdjustment.create({ data: { productId: id, adminUserId, previousQuantity: current.stockQuantity, newQuantity: input.stockQuantity, reason } });
+        await tx.auditEvent.create({ data: { adminUserId, action: 'INVENTORY_ADJUSTED', entityType: 'PRODUCT', entityId: id, summary: `Inventory adjusted for product ${id}`, reason, changes: { before: current.stockQuantity, after: input.stockQuantity } } });
         return tx.product.findUniqueOrThrow({ where: { id }, select: { id: true, slug: true, stockQuantity: true, status: true, updatedAt: true } });
       });
     } catch (error) { if (isMissingError(error)) throw new NotFoundException('Product not found.'); throw error; }
   }
 
+  async transitionUnit(id: string, input: UnitTransitionDto, adminUserId: string) {
+    const reason = input.reason.trim();
+    if (!reason) throw new BadRequestException('Enter a reason for this inventory transition.');
+    return this.prisma.$transaction(async tx => {
+      const current = await tx.product.findUnique({ where: { id }, select: { id: true, slug: true, productType: true, trackingMode: true, unitStatus: true, stockQuantity: true } });
+      if (!current) throw new NotFoundException('Product not found.');
+      if (current.productType !== 'LAPTOP' || current.trackingMode !== 'INDIVIDUAL' || current.unitStatus !== 'AVAILABLE' || current.stockQuantity !== 1) {
+        throw new ConflictException('Only an available, individually tracked laptop can be sold or removed.');
+      }
+      const changed = await tx.product.updateMany({ where: { id, trackingMode: 'INDIVIDUAL', unitStatus: 'AVAILABLE', stockQuantity: 1 }, data: { unitStatus: input.status, stockQuantity: 0 } });
+      if (changed.count !== 1) throw new ConflictException('Inventory changed. Refresh and try again.');
+      await tx.auditEvent.create({ data: { adminUserId, action: input.status, entityType: 'PRODUCT', entityId: id, summary: `Laptop ${input.status.toLowerCase()}: ${current.slug}`, reason, changes: { before: { unitStatus: 'AVAILABLE', stockQuantity: 1 }, after: { unitStatus: input.status, stockQuantity: 0 } } } });
+      return tx.product.findUniqueOrThrow({ where: { id }, select: { id: true, slug: true, stockQuantity: true, unitStatus: true, status: true, updatedAt: true } });
+    });
+  }
+
+  async changeHardware(id: string, input: HardwareChangeDto, adminUserId: string) {
+    const reason = input.reason.trim();
+    if (!reason) throw new BadRequestException('Enter a reason for the physical hardware change.');
+    if ((input.cpu !== undefined && !input.cpu.trim()) || (input.gpu !== undefined && !input.gpu.trim())) throw new BadRequestException('Installed CPU and graphics descriptions cannot be blank.');
+    return this.prisma.$transaction(async tx => {
+      const current = await tx.product.findUnique({ where: { id }, include: { ramOptions: true, storageOptions: true } });
+      if (!current || current.productType !== 'LAPTOP') throw new NotFoundException('Laptop not found.');
+      const nextRamGB = input.baseRamGB ?? current.baseRamGB;
+      const nextRamType = input.baseRamType ?? current.baseRamType;
+      const nextStorageGB = input.baseStorageGB ?? current.baseStorageGB;
+      const nextStorageType = input.baseStorageType ?? current.baseStorageType;
+      if (nextRamGB == null || nextRamType == null || nextStorageGB == null || nextStorageType == null) throw new BadRequestException('The laptop must have complete installed RAM and storage values.');
+      const ram = current.ramOptions.find(option => option.capacityGB === nextRamGB && option.type === nextRamType && option.isAvailable);
+      const storage = current.storageOptions.find(option => option.capacityGB === nextStorageGB && option.type === nextStorageType && option.isAvailable);
+      if (!ram || !storage) throw new BadRequestException('Add and enable the physically installed RAM and storage options before recording this hardware change.');
+      if ((current.baseRamGB !== nextRamGB || current.baseRamType !== nextRamType) && current.baseRamGB !== null && current.baseRamType !== null) {
+        await tx.productRamOption.updateMany({ where: { productId: id, capacityGB: current.baseRamGB, type: current.baseRamType }, data: { isBase: false, isAvailable: false } });
+      }
+      if ((current.baseStorageGB !== nextStorageGB || current.baseStorageType !== nextStorageType) && current.baseStorageGB !== null && current.baseStorageType !== null) {
+        await tx.productStorageOption.updateMany({ where: { productId: id, capacityGB: current.baseStorageGB, type: current.baseStorageType }, data: { isBase: false, isAvailable: false } });
+      }
+      await tx.productRamOption.updateMany({ where: { productId: id }, data: { isBase: false } });
+      await tx.productStorageOption.updateMany({ where: { productId: id }, data: { isBase: false } });
+      await tx.productRamOption.update({ where: { id: ram.id }, data: { isBase: true, priceDeltaMinor: 0 } });
+      await tx.productStorageOption.update({ where: { id: storage.id }, data: { isBase: true, priceDeltaMinor: 0 } });
+      await tx.productUpgradeCombination.upsert({ where: { productId_ramCapacityGB_ramType_storageCapacityGB_storageType: { productId: id, ramCapacityGB: nextRamGB, ramType: nextRamType, storageCapacityGB: nextStorageGB, storageType: nextStorageType } }, create: { productId: id, ramCapacityGB: nextRamGB, ramType: nextRamType, storageCapacityGB: nextStorageGB, storageType: nextStorageType, isAvailable: true }, update: { isAvailable: true } });
+      const hardware = { cpu: input.cpu?.trim() ?? current.cpu, gpu: input.gpu?.trim() ?? current.gpu, baseRamGB: nextRamGB, baseRamType: nextRamType, baseStorageGB: nextStorageGB, baseStorageType: nextStorageType };
+      const changed = await tx.product.updateMany({ where: { id, cpu: current.cpu, gpu: current.gpu, baseRamGB: current.baseRamGB, baseRamType: current.baseRamType, baseStorageGB: current.baseStorageGB, baseStorageType: current.baseStorageType }, data: hardware });
+      if (changed.count !== 1) throw new ConflictException('Installed hardware changed. Refresh the product and record the physical change again.');
+      const updated = await tx.product.findUniqueOrThrow({ where: { id }, select: { cpu: true, gpu: true, baseRamGB: true, baseRamType: true, baseStorageGB: true, baseStorageType: true } });
+      await tx.auditEvent.create({ data: { adminUserId, action: 'HARDWARE_CHANGED', entityType: 'PRODUCT', entityId: id, summary: `Recorded installed hardware change for ${brandModel(current.brand, current.model)}`, reason, changes: { before: { cpu: current.cpu, gpu: current.gpu, ram: [current.baseRamGB, current.baseRamType], storage: [current.baseStorageGB, current.baseStorageType] }, after: { cpu: updated.cpu, gpu: updated.gpu, ram: [updated.baseRamGB, updated.baseRamType], storage: [updated.baseStorageGB, updated.baseStorageType] } } } });
+      return this.adminProduct(await tx.product.findUniqueOrThrow({ where: { id }, include }));
+    });
+  }
+
+  async auditList(query: AuditPageDto) {
+    const take = Math.min(Math.max(query.pageSize ?? 25, 1), 100);
+    const currentPage = Math.max(query.page ?? 1, 1);
+    if (query.from && query.to && new Date(query.from) > new Date(query.to)) throw new BadRequestException('Audit range start must be before its end.');
+    const where: Prisma.AuditEventWhereInput = {
+      ...(query.action ? { action: query.action } : {}), ...(query.outcome ? { outcome: query.outcome } : {}),
+      ...(query.entityId ? { entityId: { contains: query.entityId, mode: 'insensitive' } } : {}),
+      ...(query.administrator ? { adminUser: { email: { contains: query.administrator, mode: 'insensitive' } } } : {}),
+      ...(query.from || query.to ? { createdAt: { ...(query.from ? { gte: new Date(query.from) } : {}), ...(query.to ? { lte: new Date(query.to) } : {}) } } : {}),
+    };
+    const [total, items] = await this.prisma.$transaction([
+      this.prisma.auditEvent.count({ where }),
+      this.prisma.auditEvent.findMany({ where, include: { adminUser: { select: { email: true } } }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip: (currentPage - 1) * take, take }),
+    ]);
+    return { items: items.map(({ adminUser, adminUserId, changes, ...event }) => ({ ...event, administrator: adminUser?.email ?? 'Former administrator', changes })), total, page: currentPage, pageSize: take };
+  }
+
   async adminList(query: ProductSearchDto = new ProductSearchDto()) {
+    if ((query.family === 'LAPTOP' && query.productType && query.productType !== 'LAPTOP') ||
+      (query.family === 'ACCESSORY' && query.productType === 'LAPTOP') ||
+      (query.family === 'LAPTOP' && query.accessoryCategoryId)) {
+      throw new BadRequestException('The selected family, type, and category filters cannot be combined.');
+    }
     if (query.minPriceMinor !== undefined && query.maxPriceMinor !== undefined && query.minPriceMinor > query.maxPriceMinor) {
       throw new BadRequestException({ message: 'Maximum price must be greater than or equal to minimum price.', fieldErrors: { maxPriceMinor: 'Maximum price cannot be lower than minimum price.' } });
     }
@@ -292,9 +400,12 @@ export class ProductsService {
     const ramType = text && ['DDR4', 'DDR5', 'LPDDR4X', 'LPDDR5', 'LPDDR5X', 'OTHER'].includes(text.toUpperCase()) ? text.toUpperCase() as ProductSearchDto['ramType'] : undefined;
     const storageType = text && ['SSD', 'HDD', 'NVME', 'SATA', 'OTHER'].includes(text.toUpperCase()) ? text.toUpperCase() as ProductSearchDto['storageType'] : undefined;
     const where: Prisma.ProductWhereInput = {
+      ...(query.family === 'LAPTOP' ? { productType: 'LAPTOP' } : query.family === 'ACCESSORY' ? { productType: { not: 'LAPTOP' } } : {}),
+      ...(query.stockStatus === 'IN_STOCK' ? { stockQuantity: { gt: 0 } } : query.stockStatus === 'OUT_OF_STOCK' ? { stockQuantity: 0 } : {}),
       ...(query.condition ? { condition: query.condition } : {}),
       ...(query.status ? { status: query.status } : {}),
       ...(query.productType ? { productType: query.productType } : {}),
+      ...(query.accessoryCategoryId ? { accessoryCategoryId: query.accessoryCategoryId } : {}),
       ...(query.useCase === 'UNCATEGORIZED' ? { useCase: null } : query.useCase ? { useCase: query.useCase } : {}),
       ...(query.minPriceMinor !== undefined || query.maxPriceMinor !== undefined ? {
         priceMinor: {
@@ -315,8 +426,10 @@ export class ProductsService {
       ...(text ? {
         OR: [
           { brand: { contains: text, mode: 'insensitive' } },
+          { sku: { contains: text, mode: 'insensitive' } },
           { model: { contains: text, mode: 'insensitive' } },
           { slug: { contains: text, mode: 'insensitive' } },
+          { serialNumber: { contains: text, mode: 'insensitive' } },
           { description: { contains: text, mode: 'insensitive' } },
           { cpu: { contains: text, mode: 'insensitive' } },
           { gpu: { contains: text, mode: 'insensitive' } },
@@ -358,9 +471,9 @@ export class ProductsService {
   }
 
   private adminProduct(product: ProductWithRelations) {
-    const { images: records, ...fields } = product;
+    const { images: records, serialNumberNormalized: _normalizedSerial, skuNormalized: _normalizedSku, ...fields } = product;
     const images = records.map(image => ({ id: image.id, contentType: image.contentType, byteSize: image.byteSize, imageUrl: `/api/public/images/${image.id}` }));
-    return { ...fields, image: images[0] ?? null, images };
+    return { ...fields, accessoryCategory: product.accessoryCategory ?? null, image: images[0] ?? null, images };
   }
 
   private publicProduct(product: ProductWithRelations) {
@@ -370,7 +483,8 @@ export class ProductsService {
     const ramIds = new Set(compatible.flatMap(combination => product.ramOptions.filter(option => option.capacityGB === combination.ramCapacityGB && option.type === combination.ramType).map(option => option.id)));
     const storageIds = new Set(compatible.flatMap(combination => product.storageOptions.filter(option => option.capacityGB === combination.storageCapacityGB && option.type === combination.storageType).map(option => option.id)));
     return {
-      id: product.id, slug: product.slug, productType: product.productType, brand: product.brand, model: product.model, description: product.description,
+      id: product.id, slug: product.slug, sku: product.sku, productType: product.productType, brand: product.brand, model: product.model, description: product.description,
+      accessoryCategory: product.accessoryCategory ? { id: product.accessoryCategory.id, name: product.accessoryCategory.name, slug: product.accessoryCategory.slug } : null,
       condition: product.condition, conditionNotes: product.conditionNotes, useCase: product.useCase, currency: product.currency, priceMinor: product.priceMinor,
       specs: product.specs,
       cpu: product.cpu, gpu: product.gpu, baseRamGB: product.baseRamGB, baseRamType: product.baseRamType,
@@ -409,11 +523,33 @@ export class ProductsService {
 }
 
 function isUniqueError(error: unknown): error is { code: 'P2002'; meta?: { target?: unknown } } { return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002'; }
+function brandModel(brand: string, model: string) { return `${brand.trim()} ${model.trim()}`.trim(); }
+function productChanges(existing: ProductWithRelations, input: ProductDto): Prisma.InputJsonObject {
+  const optionValues = (items: Array<{ capacityGB: number; type: string; priceDeltaMinor: number; isBase: boolean; isAvailable: boolean }>) => [...items]
+    .map(({ capacityGB, type, priceDeltaMinor, isBase, isAvailable }) => ({ capacityGB, type, priceDeltaMinor, isBase, isAvailable }))
+    .sort((a, b) => a.capacityGB - b.capacityGB || a.type.localeCompare(b.type));
+  const candidates: Record<string, [unknown, unknown]> = {
+    slug: [existing.slug, input.slug.trim().toLowerCase()], sku: [existing.sku, input.sku?.trim() ?? existing.sku], accessoryCategoryId: [existing.accessoryCategoryId, input.accessoryCategoryId ?? existing.accessoryCategoryId], brand: [existing.brand, input.brand.trim()], model: [existing.model, input.model.trim()],
+    description: [existing.description, input.description?.trim() ?? ''], condition: [existing.condition, input.condition], conditionNotes: [existing.conditionNotes, input.conditionNotes?.trim() ?? null],
+    useCase: [existing.useCase, input.useCase ?? null], status: [existing.status, input.status], priceMinor: [existing.priceMinor, input.priceMinor], specs: [existing.specs, input.specs ?? {}],
+    displaySizeInches: [existing.displaySizeInches, input.displaySizeInches ?? null], displayResolution: [existing.displayResolution, input.displayResolution?.trim() ?? null],
+    displayPanel: [existing.displayPanel, input.displayPanel?.trim() ?? null], refreshRateHz: [existing.refreshRateHz, input.refreshRateHz ?? null],
+    ramUpgradeOptions: [optionValues(existing.ramOptions), optionValues(input.ramOptions ?? [])],
+    storageUpgradeOptions: [optionValues(existing.storageOptions), optionValues(input.storageOptions ?? [])],
+    compatibleConfigurations: [
+      existing.combinations.map(({ ramCapacityGB, ramType, storageCapacityGB, storageType, isAvailable }) => ({ ramCapacityGB, ramType, storageCapacityGB, storageType, isAvailable })).sort((a, b) => a.ramCapacityGB - b.ramCapacityGB || a.ramType.localeCompare(b.ramType) || a.storageCapacityGB - b.storageCapacityGB || a.storageType.localeCompare(b.storageType)),
+      [...(input.combinations ?? [])].sort((a, b) => a.ramCapacityGB - b.ramCapacityGB || a.ramType.localeCompare(b.ramType) || a.storageCapacityGB - b.storageCapacityGB || a.storageType.localeCompare(b.storageType)),
+    ],
+  };
+  return JSON.parse(JSON.stringify(Object.fromEntries(Object.entries(candidates).filter(([, [before, after]]) => JSON.stringify(before) !== JSON.stringify(after)).map(([key, [before, after]]) => [key, { before, after }])))) as Prisma.InputJsonObject;
+}
 function uniqueConflict(error: { code: 'P2002'; meta?: { target?: unknown } }): ConflictException {
   const target = Array.isArray(error.meta?.target) ? error.meta.target.join(',') : String(error.meta?.target ?? '');
   if (target.toLowerCase().includes('slug')) {
     return new ConflictException({ message: 'A product with this URL slug already exists.', fieldErrors: { slug: 'Choose a unique URL slug.' } });
   }
+  if (target.toLowerCase().includes('serialnumber')) return new ConflictException({ message: 'A laptop with this serial number is already registered.', fieldErrors: { serialNumber: 'This serial number is already registered.' } });
+  if (target.toLowerCase().includes('sku')) return new ConflictException({ message: 'A product with this SKU is already registered.', fieldErrors: { sku: 'This SKU is already in use.' } });
   if (target.toLowerCase().includes('capacity') || target.toLowerCase().includes('type')) return new ConflictException('An option with this capacity and type already exists for the product.');
   return new ConflictException('The product conflicts with an existing catalog record.');
 }

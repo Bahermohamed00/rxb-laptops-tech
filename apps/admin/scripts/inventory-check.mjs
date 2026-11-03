@@ -94,7 +94,7 @@ try {
   assert.equal(window.localStorage.length, 0, 'The live inventory view must not read or persist product data in browser storage')
   console.log('PASS: API-backed inventory search, stock filters, sorting, CSRF-protected quantity update and no localStorage persistence')
 
-  await click(button('Products'))
+  await click(button('All Products'))
   await act(async () => new Promise(resolve => setTimeout(resolve, 350)))
   assert.ok(document.querySelector('.live-products'))
   assert.ok(document.querySelector('.live-products-table'))
@@ -111,12 +111,12 @@ try {
   await act(async () => new Promise(resolve => setTimeout(resolve, 20)))
   await fill('model', 'Unsaved route draft')
   confirmationDecision = false
-  await click(button('Products'))
+  await click(button('All Products'))
   assert.equal(window.location.hash, '#/products/a6f9de80-86b4-4d04-948b-442a3f8b4001/edit', 'Declining navigation keeps the edit route')
   assert.equal(field('model').value, 'Unsaved route draft', 'Declining navigation preserves the draft')
   confirmationDecision = true
   await click(button('Back to product list'))
-  assert.equal(window.location.hash, '#/products', 'Confirming discard returns to the product listing')
+  assert.equal(window.location.hash, '#/all-products', 'Confirming discard returns to the all-products listing')
   await click(button('Add product'))
   assert.ok(document.querySelector('.live-product-type-picker'))
   const productTypeOptions = [...document.querySelectorAll('.live-product-type-option')]
@@ -157,6 +157,8 @@ try {
   assert.ok(field('specs.backlight'))
   await fill('brand', 'RXB')
   await fill('model', 'Actual Keyboard Listing')
+  await fill('sku', 'RXB-KEYBOARD-01')
+  await fill('accessoryCategoryId', 'category-accessories')
   await fill('condition', 'NEW')
   await fill('price', '1200.00')
   await fill('stock', '4')
@@ -186,7 +188,7 @@ try {
   assert.equal(document.querySelector('[name="stock-a6f9de80-86b4-4d04-948b-442a3f8b4001"]').value, '2')
   console.log('PASS: Products and Inventory show the same API-backed stock after route changes and remount')
 
-  await click(button('Products'))
+  await click(button('All Products'))
   await act(async () => new Promise(resolve => setTimeout(resolve, 350)))
   restoreFetch.setListResponseOverride(fixtures)
   await click(button('Refresh'))

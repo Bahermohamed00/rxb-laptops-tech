@@ -43,11 +43,11 @@ export function useHashView() {
     setProductId(null)
   }
   function navigateProduct(id: string | null) {
-    const hash = id ? productEditHash(id) : viewHash('Products')
+    const hash = id ? productEditHash(id) : viewHash('All Products')
     if (!canNavigate(hash)) return
     currentHash.current = hash
     if (window.location.hash !== hash) window.location.hash = hash
-    setTarget('Products')
+    setTarget('All Products')
     setProductId(id)
   }
   return { target, productId, navigate, navigateProduct }

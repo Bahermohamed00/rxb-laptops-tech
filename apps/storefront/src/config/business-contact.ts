@@ -12,6 +12,7 @@ export function productInquiryMessage(
   configuration: { ram: string; storage: string } | null,
   currency: string,
   priceMinor: number,
+  priceBreakdown?: { base: number; ramDelta: number; storageDelta: number },
 ) {
   const productType = product.productType === 'OTHER_ACCESSORY'
     ? 'Other accessory'
@@ -20,6 +21,7 @@ export function productInquiryMessage(
     ? `Selected configuration: ${configuration.ram} RAM; ${configuration.storage} storage.`
     : product.productType === 'LAPTOP' ? 'Configuration: listed laptop configuration.' : 'Configuration: listed product configuration.'
   const price = (priceMinor / 100).toLocaleString('en-EG', { style: 'currency', currency })
+  const money = (minor: number) => (minor / 100).toLocaleString('en-EG', { style: 'currency', currency })
   return [
     product.productType === 'LAPTOP'
       ? 'Hello RXB, I am interested in this laptop listing.'
@@ -28,6 +30,7 @@ export function productInquiryMessage(
     `Product type: ${productType}`,
     `Product URL: ${productUrl}`,
     configurationLine,
+    ...(priceBreakdown ? [`Base price: ${money(priceBreakdown.base)}`, `RAM upgrade: ${money(priceBreakdown.ramDelta)}`, `Storage upgrade: ${money(priceBreakdown.storageDelta)}`] : []),
     `Price: ${price}`,
     'Please let me know more. This is an inquiry, not an order.',
   ].join('\n')

@@ -17,10 +17,14 @@ export class AuthService {
     const user = await this.prisma.adminUser.findUnique({ where: { email } });
     if (!user || user.status !== AdminUserStatus.ACTIVE) {
       await argon2.hash(password, argonOptions);
+      await this.recordSecurityEvent({ action: 'SIGN_IN_FAILED', entityType: 'ADMIN_SESSION', summary: 'Administrator sign-in failed.', outcome: 'FAILURE', reason: 'INVALID_CREDENTIALS' });
       throw new UnauthorizedException('Invalid email or password.');
     }
     const valid = await argon2.verify(user.passwordHash, password).catch(() => false);
-    if (!valid) throw new UnauthorizedException('Invalid email or password.');
+    if (!valid) {
+      await this.recordSecurityEvent({ action: 'SIGN_IN_FAILED', entityType: 'ADMIN_SESSION', summary: 'Administrator sign-in failed.', outcome: 'FAILURE', reason: 'INVALID_CREDENTIALS' });
+      throw new UnauthorizedException('Invalid email or password.');
+    }
 
     const now = new Date();
     const expiresAt = new Date(now.getTime() + this.config.getOrThrow<number>('ADMIN_SESSION_TTL_MS'));
@@ -29,6 +33,7 @@ export class AuthService {
     const tokenHash = createHash('sha256').update(token).digest('hex');
     await this.prisma.adminSession.create({ data: { userId: user.id, tokenHash, csrfToken, expiresAt } });
     await this.prisma.adminUser.update({ where: { id: user.id }, data: { lastLoginAt: now } });
+    await this.recordSecurityEvent({ adminUserId: user.id, actorEmail: user.email, action: 'SIGN_IN_SUCCEEDED', entityType: 'ADMIN_SESSION', summary: 'Administrator signed in.' });
     return { user: this.publicUser(user), token, csrfToken, expiresAt };
   }
 
@@ -37,7 +42,13 @@ export class AuthService {
   }
 
   async revoke(sessionId: string): Promise<void> {
-    await this.prisma.adminSession.update({ where: { id: sessionId }, data: { revokedAt: new Date(), expiresAt: new Date() } });
+    const session = await this.prisma.adminSession.update({ where: { id: sessionId }, data: { revokedAt: new Date(), expiresAt: new Date() } });
+    await this.recordSecurityEvent({ adminUserId: session.userId, action: 'SESSION_REVOKED', entityType: 'ADMIN_SESSION', entityId: sessionId, summary: 'Administrator session revoked.' });
+  }
+
+  private async recordSecurityEvent(data: { adminUserId?: string; actorEmail?: string; action: string; entityType: string; entityId?: string; summary: string; outcome?: string; reason?: string }) {
+    const audit = (this.prisma as unknown as { auditEvent?: { create: (args: { data: typeof data }) => Promise<unknown> } }).auditEvent;
+    if (audit) await audit.create({ data }).catch(() => undefined);
   }
 
   cookieOptions(): { httpOnly: true; secure: boolean; sameSite: 'lax'; path: string; maxAge: number } {

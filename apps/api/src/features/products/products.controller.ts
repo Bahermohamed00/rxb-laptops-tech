@@ -7,7 +7,7 @@ import { CsrfGuard } from '../../auth/guards/csrf.guard.js';
 import { OriginGuard } from '../../auth/guards/origin.guard.js';
 import { RolesGuard } from '../../auth/guards/roles.guard.js';
 import { SessionGuard } from '../../auth/guards/session.guard.js';
-import { PriceQuoteDto, ProductDto, ProductSearchDto, UpdateInventoryDto } from './products.dto.js';
+import { AuditPageDto, HardwareChangeDto, PriceQuoteDto, ProductDto, ProductSearchDto, UnitTransitionDto, UpdateInventoryDto } from './products.dto.js';
 import { ProductsService } from './products.service.js';
 
 @Controller('admin/products')
@@ -15,12 +15,15 @@ import { ProductsService } from './products.service.js';
 @Roles(AdminRole.ADMIN, AdminRole.SUPER_ADMIN)
 export class AdminProductsController {
   constructor(private readonly products: ProductsService) {}
+  @Get('audit') audit(@Query() query: AuditPageDto) { return this.products.auditList(query); }
   @Get() list(@Query() query: ProductSearchDto) { return this.products.adminList(query); }
   @Get(':id') detail(@Param('id', ParseUUIDPipe) id: string) { return this.products.adminDetail(id); }
-  @Post() @UseGuards(SessionGuard, RolesGuard, OriginGuard, CsrfGuard) create(@Body() body: ProductDto) { return this.products.create(body); }
-  @Patch(':id') @UseGuards(SessionGuard, RolesGuard, OriginGuard, CsrfGuard) update(@Param('id', ParseUUIDPipe) id: string, @Body() body: ProductDto) { return this.products.update(id, body); }
+  @Post() @UseGuards(SessionGuard, RolesGuard, OriginGuard, CsrfGuard) create(@Body() body: ProductDto, @CurrentAdmin() admin: AuthenticatedAdmin) { return this.products.create(body, admin.id); }
+  @Patch(':id') @UseGuards(SessionGuard, RolesGuard, OriginGuard, CsrfGuard) update(@Param('id', ParseUUIDPipe) id: string, @Body() body: ProductDto, @CurrentAdmin() admin: AuthenticatedAdmin) { return this.products.update(id, body, admin.id); }
   @Patch(':id/inventory') @UseGuards(SessionGuard, RolesGuard, OriginGuard, CsrfGuard) updateInventory(@Param('id', ParseUUIDPipe) id: string, @Body() body: UpdateInventoryDto, @CurrentAdmin() admin: AuthenticatedAdmin) { return this.products.updateInventory(id, body, admin.id); }
-  @Delete(':id') @UseGuards(SessionGuard, RolesGuard, OriginGuard, CsrfGuard) archive(@Param('id', ParseUUIDPipe) id: string) { return this.products.archive(id); }
+  @Post(':id/transition') @UseGuards(SessionGuard, RolesGuard, OriginGuard, CsrfGuard) transition(@Param('id', ParseUUIDPipe) id: string, @Body() body: UnitTransitionDto, @CurrentAdmin() admin: AuthenticatedAdmin) { return this.products.transitionUnit(id, body, admin.id); }
+  @Post(':id/hardware') @UseGuards(SessionGuard, RolesGuard, OriginGuard, CsrfGuard) hardwareChange(@Param('id', ParseUUIDPipe) id: string, @Body() body: HardwareChangeDto, @CurrentAdmin() admin: AuthenticatedAdmin) { return this.products.changeHardware(id, body, admin.id); }
+  @Delete(':id') @UseGuards(SessionGuard, RolesGuard, OriginGuard, CsrfGuard) archive(@Param('id', ParseUUIDPipe) id: string, @CurrentAdmin() admin: AuthenticatedAdmin) { return this.products.archive(id, admin.id); }
 }
 
 @Controller('public/products')

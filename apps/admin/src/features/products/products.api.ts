@@ -1,23 +1,26 @@
+import { API_BASE_URL } from '../../config/api-base.runtime'
+
 export type RamOption = { id?: string; capacityGB: number; type: string; priceDeltaMinor: number; isBase: boolean; isAvailable: boolean }
 export type StorageOption = RamOption
 export type UpgradeCombination = { ramCapacityGB: number; ramType: string; storageCapacityGB: number; storageType: string; isAvailable: boolean }
 export type ProductType = 'LAPTOP'|'KEYBOARD'|'MOUSE'|'MOUSE_PAD'|'OTHER_ACCESSORY'
+export type AccessoryCategory = { id: string; name: string; normalizedName: string; slug: string; description: string; imageUrl: string | null; isActive: boolean; productCount?: number; createdAt?: string; updatedAt?: string }
 export type ProductSpecs = Record<string, string | number>
 export type ApiProduct = {
-  id: string; slug: string; productType: ProductType; brand: string; model: string; description: string; condition: 'NEW'|'PRE_OWNED'; conditionNotes?: string | null;
+  id: string; slug: string; sku?: string | null; productType: ProductType; accessoryCategoryId?: string | null; accessoryCategory?: AccessoryCategory | null; brand: string; model: string; serialNumber?: string | null; trackingMode?: 'LEGACY_QUANTITY'|'INDIVIDUAL'; unitStatus?: 'AVAILABLE'|'SOLD'|'REMOVED'|null; description: string; condition: 'NEW'|'PRE_OWNED'; conditionNotes?: string | null;
   useCase: 'WORK'|'STUDY'|'GAMING'|null;
   status: 'DRAFT'|'ACTIVE'|'ARCHIVED'; currency: string; priceMinor: number; cpu: string|null; gpu: string|null; baseRamGB: number|null; baseRamType: string|null;
   baseStorageGB: number|null; baseStorageType: string|null; displaySizeInches?: number | null; displayResolution?: string | null; displayPanel?: string | null;
   refreshRateHz?: number | null; specs: ProductSpecs; stockQuantity: number; createdAt: string; updatedAt: string;
   image: null | { id: string; imageUrl: string }; images: { id: string; imageUrl: string }[]; ramOptions: RamOption[]; storageOptions: StorageOption[]; combinations: UpgradeCombination[];
 }
-export type ProductPayload = Omit<ApiProduct, 'id'|'createdAt'|'updatedAt'|'currency'|'image'|'images'|'ramOptions'|'storageOptions'|'combinations'|'cpu'|'gpu'|'baseRamGB'|'baseRamType'|'baseStorageGB'|'baseStorageType'> & {
+export type ProductPayload = Omit<ApiProduct, 'id'|'createdAt'|'updatedAt'|'currency'|'image'|'images'|'ramOptions'|'storageOptions'|'combinations'|'cpu'|'gpu'|'baseRamGB'|'baseRamType'|'baseStorageGB'|'baseStorageType'|'stockQuantity'> & {
   cpu?: string; gpu?: string; baseRamGB?: number; baseRamType?: string;
   baseStorageGB?: number; baseStorageType?: string;
-  specs: ProductSpecs; imageId?: string; imageIds?: string[]; ramOptions: RamOption[]; storageOptions: StorageOption[]; combinations: UpgradeCombination[];
+  stockQuantity?: number; specs: ProductSpecs; serialNumber?: string; imageId?: string; imageIds?: string[]; ramOptions: RamOption[]; storageOptions: StorageOption[]; combinations: UpgradeCombination[];
 }
 export type ProductSearch = {
-  q?: string; productType?: ProductType; condition?: ApiProduct['condition']; status?: ApiProduct['status']; useCase?: 'WORK'|'STUDY'|'GAMING'|'UNCATEGORIZED';
+  q?: string; productType?: ProductType; family?: 'LAPTOP'|'ACCESSORY'; stockStatus?: 'IN_STOCK'|'OUT_OF_STOCK'; accessoryCategoryId?: string; condition?: ApiProduct['condition']; status?: ApiProduct['status']; useCase?: 'WORK'|'STUDY'|'GAMING'|'UNCATEGORIZED';
   minPriceMinor?: number; maxPriceMinor?: number; cpu?: string; gpu?: string; ramGB?: number; ramType?: string;
   storageGB?: number; storageType?: string; displaySizeInches?: number; displayResolution?: string;
   page?: number; pageSize?: number; sort?: 'PRICE_ASC'|'PRICE_DESC'|'NAME_ASC'|'NAME_DESC'|'CREATED_DESC'|'UPDATED_DESC';
@@ -54,13 +57,12 @@ function collectValidationErrors(items: unknown, parent = '', output: Record<str
   return output
 }
 
-const apiBase = (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:5185/api').replace(/\/$/, '')
-export const imageSource = (url: string) => `${apiBase}${url.replace(/^\/api/, '')}`
+export const imageSource = (url: string) => `${API_BASE_URL}${url.replace(/^\/api/, '')}`
 
 async function request<T>(path: string, csrfToken?: string, init: RequestInit = {}): Promise<T> {
   let response: Response
   try {
-    response = await fetch(`${apiBase}${path}`, {
+    response = await fetch(`${API_BASE_URL}${path}`, {
       ...init, credentials: 'include',
       headers: { ...(init.body ? { 'Content-Type': 'application/json' } : {}), ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}), ...init.headers },
     })
@@ -101,24 +103,43 @@ export const listProducts = async (search: ProductSearch = {}): Promise<ProductP
   }
   return result
 }
+export const listAccessoryCategories = () => request<AccessoryCategory[]>('/admin/categories')
+export const saveAccessoryCategory = (input: { id?: string; name: string; slug?: string; description: string; imageUrl: string | null; isActive: boolean }, csrf: string) => {
+  const { id, ...body } = input
+  return request<AccessoryCategory>(id ? `/admin/categories/${id}` : '/admin/categories', csrf, { method: id ? 'PATCH' : 'POST', body: JSON.stringify(body) })
+}
+export const archiveAccessoryCategory = (id: string, csrf: string) => request<AccessoryCategory>(`/admin/categories/${id}`, csrf, { method: 'DELETE' })
 export async function listAllProducts() {
   const first = await listProducts({ page: 1, pageSize: 100 })
-  const pages = await Promise.all(Array.from({ length: Math.ceil(first.total / first.pageSize) - 1 }, (_, index) =>
-    listProducts({ page: index + 2, pageSize: first.pageSize }),
-  ))
-  return [...first.items, ...pages.flatMap(result => result.items)]
+  const items = [...first.items]
+  const pageCount = Math.ceil(first.total / first.pageSize)
+  for (let page = 2; page <= pageCount; page++) {
+    const result = await listProducts({ page, pageSize: first.pageSize })
+    items.push(...result.items)
+  }
+  return items
 }
 export const getProduct = (id: string) => request<ApiProduct>(`/admin/products/${id}`)
 export const createProduct = (payload: ProductPayload, csrf: string) => request<ApiProduct>('/admin/products', csrf, { method: 'POST', body: JSON.stringify(payload) })
 export const updateProduct = (id: string, payload: ProductPayload, csrf: string) => request<ApiProduct>(`/admin/products/${id}`, csrf, { method: 'PATCH', body: JSON.stringify(payload) })
 export const archiveProduct = (id: string, csrf: string) => request<ApiProduct>(`/admin/products/${id}`, csrf, { method: 'DELETE' })
 export const updateInventoryQuantity = (id: string, stockQuantity: number, reason: string, csrf: string) => request<{ id: string; stockQuantity: number; status: string; updatedAt: string }>(`/admin/products/${id}/inventory`, csrf, { method: 'PATCH', body: JSON.stringify({ stockQuantity, reason }) })
+export const transitionLaptop = (id: string, status: 'SOLD'|'REMOVED', reason: string, csrf: string) => request<{ id: string; stockQuantity: number; unitStatus: string; updatedAt: string }>(`/admin/products/${id}/transition`, csrf, { method: 'POST', body: JSON.stringify({ status, reason }) })
+export const changeLaptopHardware = (id: string, hardware: { cpu?: string; gpu?: string; baseRamGB?: number; baseRamType?: string; baseStorageGB?: number; baseStorageType?: string; reason: string }, csrf: string) => request<ApiProduct>(`/admin/products/${id}/hardware`, csrf, { method: 'POST', body: JSON.stringify(hardware) })
 export const deleteUnattachedImage = (id: string, csrf: string) => request<void>(`/admin/images/${id}`, csrf, { method: 'DELETE' })
+export type AuditEvent = { id: string; createdAt: string; administrator: string; action: string; entityType: string; entityId: string | null; summary: string; outcome: string; reason: string | null; changes: unknown }
+export async function listAuditEvents(page: number, filters: { action?: string; outcome?: string; administrator?: string; entityId?: string; from?: string; to?: string }, signal?: AbortSignal): Promise<{ items: AuditEvent[]; total: number; page: number; pageSize: number }> {
+  const query = new URLSearchParams({ page: String(page), pageSize: '25' })
+  for (const [key, value] of Object.entries(filters)) if (value) query.set(key, value)
+  const response = await fetch(`${API_BASE_URL}/admin/products/audit?${query}`, { credentials: 'include', signal })
+  if (!response.ok) throw new Error(response.status === 401 ? 'Your admin session expired.' : 'Audit history could not be loaded.')
+  return response.json()
+}
 
 export function uploadProductImage(file: File, csrf: string, onProgress: (progress: number) => void): Promise<{ id: string; imageUrl: string }> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
-    xhr.open('POST', `${apiBase}/admin/images`)
+    xhr.open('POST', `${API_BASE_URL}/admin/images`)
     xhr.timeout = 120_000
     xhr.withCredentials = true
     xhr.setRequestHeader('Content-Type', 'application/octet-stream')
@@ -141,7 +162,7 @@ export function uploadProductImage(file: File, csrf: string, onProgress: (progre
       else if (xhr.status === 403) reject(new Error('You do not have permission to upload product images.'))
       else if (xhr.status === 413) reject(new Error('This image exceeds the upload size limit. Choose a smaller file and retry.'))
       else if (xhr.status === 400) reject(new Error('Use a valid JPEG, PNG, or WebP image within the configured size limit.'))
-      else if (xhr.status === 503) reject(new Error('Image upload is unavailable because image storage is not configured for this environment.'))
+      else if (xhr.status === 503) reject(new Error('Image storage is temporarily unavailable. Try again later.'))
       else reject(new Error('The image upload failed on the server. Your product changes were not saved; retry the upload.'))
     }
     xhr.send(file)

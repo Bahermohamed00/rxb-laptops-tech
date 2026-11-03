@@ -36,6 +36,17 @@ enum ProductType {
   OTHER_ACCESSORY
 }
 
+enum InventoryTrackingMode {
+  LEGACY_QUANTITY
+  INDIVIDUAL
+}
+
+enum UnitInventoryStatus {
+  AVAILABLE
+  SOLD
+  REMOVED
+}
+
 enum LaptopUseCase {
   WORK
   STUDY
@@ -70,6 +81,7 @@ model AdminUser {
   updatedAt    DateTime        @updatedAt @db.Timestamptz(3)
   sessions     AdminSession[]
   inventoryAdjustments InventoryAdjustment[]
+  auditEvents  AuditEvent[]
 
   @@index([status, role])
 }
@@ -91,6 +103,8 @@ model AdminSession {
 model Product {
   id             String               @id @default(uuid()) @db.Uuid
   slug           String               @unique @db.VarChar(180)
+  sku            String?              @unique @db.VarChar(80)
+  skuNormalized  String?              @unique @db.VarChar(80)
   productType    ProductType          @default(LAPTOP)
   brand          String               @db.VarChar(80)
   model          String               @db.VarChar(160)
@@ -113,6 +127,10 @@ model Product {
   displayPanel   String?               @db.VarChar(80)
   refreshRateHz  Int?
   stockQuantity  Int                   @default(0)
+  serialNumber   String?               @db.VarChar(120)
+  serialNumberNormalized String?        @unique @db.VarChar(120)
+  trackingMode   InventoryTrackingMode @default(LEGACY_QUANTITY)
+  unitStatus     UnitInventoryStatus?
   createdAt      DateTime              @default(now()) @db.Timestamptz(3)
   updatedAt      DateTime              @updatedAt @db.Timestamptz(3)
   ramOptions     ProductRamOption[]
@@ -120,9 +138,27 @@ model Product {
   combinations   ProductUpgradeCombination[]
   images         ProductImage[]
   inventoryAdjustments InventoryAdjustment[]
+  accessoryCategoryId String?          @db.Uuid
+  accessoryCategory AccessoryCategory? @relation(fields: [accessoryCategoryId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   @@index([status, condition, createdAt])
   @@index([brand, model])
+  @@index([accessoryCategoryId])
+}
+
+model AccessoryCategory {
+  id           String    @id @default(uuid()) @db.Uuid
+  name         String    @db.VarChar(100)
+  normalizedName String  @unique @db.VarChar(100)
+  slug         String    @unique @db.VarChar(120)
+  description  String   @default("") @db.VarChar(2000)
+  imageUrl     String?  @db.VarChar(2048)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+  products     Product[]
+
+  @@index([isActive, name])
 }
 
 model ProductRamOption {
@@ -164,7 +200,7 @@ model ProductUpgradeCombination {
   isAvailable      Boolean     @default(true)
   product          Product    @relation(fields: [productId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   ramOption        ProductRamOption @relation("RamOptionCompatibility", fields: [productId, ramCapacityGB, ramType], references: [productId, capacityGB, type], onDelete: Restrict, onUpdate: Cascade)
-  storageOption    ProductStorageOption @relation("StorageOptionCompatibility", fields: [productId, storageCapacityGB, storageType], references: [productId, capacityGB, type], onDelete: Restrict, onUpdate: Cascade)
+  storageOption    ProductStorageOption @relation("StorageOptionCompatibility", fields: [productId, storageCapacityGB, storageType], references: [productId, capacityGB, type], onDelete: Restrict, onUpdate: Cascade, map: "ProductUpgradeCombination_productId_storageCapacityGB_storageTy")
 
   @@id([productId, ramCapacityGB, ramType, storageCapacityGB, storageType])
   @@index([productId, isAvailable])
@@ -182,6 +218,27 @@ model ProductImage {
 
   @@index([productId, position])
   @@index([createdAt])
+}
+
+model AuditEvent {
+  id          String    @id @default(uuid()) @db.Uuid
+  createdAt   DateTime  @default(now()) @db.Timestamptz(3)
+  adminUserId String?   @db.Uuid
+  actorEmail  String?   @db.VarChar(254)
+  action      String    @db.VarChar(80)
+  entityType  String    @db.VarChar(80)
+  entityId    String?   @db.VarChar(120)
+  summary     String    @db.VarChar(500)
+  outcome     String    @default("SUCCESS") @db.VarChar(24)
+  reason      String?   @db.VarChar(500)
+  changes     Json      @default("{}")
+  requestId   String?   @db.VarChar(120)
+  adminUser   AdminUser? @relation(fields: [adminUserId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([createdAt, id])
+  @@index([adminUserId, createdAt])
+  @@index([action, createdAt])
+  @@index([entityType, entityId, createdAt])
 }
 
 model InventoryAdjustment {
