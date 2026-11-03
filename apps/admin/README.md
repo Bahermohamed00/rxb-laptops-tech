@@ -1,6 +1,8 @@
-﻿# RXB Admin Preview
+﻿# RXB Admin
 
-React + TypeScript + Vite admin interface. Authentication, authorization, business records, and backend connections are not implemented. The motion system never implies a live connection or invents business metrics.
+React + TypeScript + Vite administration application. Sign-in, session refresh/logout, product management, and quantity-based inventory management use the NestJS API. The API enforces authentication, roles, Origin, and CSRF requirements; frontend routes are not the authorization boundary.
+
+Orders, Customers, and Reports remain disconnected presentation placeholders. New laptops are registered with their serial number and tracked as individual units (sell/remove with a reason); accessories keep reasoned quantity adjustments. Accessory categories, the data-backed Overview, and a read-only Audit log of product, inventory, hardware-change, and sign-in events are API-backed. See [docs/deployment/free-tier-deployment.md](../../docs/deployment/free-tier-deployment.md) for deployment setup and the complete feature-status matrix.
 
 From the repository root:
 
@@ -9,6 +11,8 @@ npm run dev:admin
 npm run build:admin
 npm run preview:admin
 ```
+
+Production builds require `VITE_API_BASE_URL` to be set to the HTTPS API URL ending in `/api`. This variable is embedded by Vite at build time and is public configuration; never put credentials or server secrets in it. Local development defaults to `http://127.0.0.1:5185/api`.
 
 ## Visual foundation
 
@@ -28,7 +32,7 @@ Runtime dependencies are `gsap` 3.15.0 and `@gsap/react` 2.1.2. Registration hap
 - `src/motion/useInteractions.ts`: fine-pointer hover elevation, icon movement, press/cancel feedback, and pointer-following card lighting. Pointer movement is frame-coalesced and reuses GSAP quick setters; bounds are measured on entry and invalidated on scroll/resize. Event listeners, pending frames, and media contexts are disposed on view changes.
 - `src/styles.css`: focus-visible accent strokes and restrained status-border feedback. Reduced motion disables CSS transitions as well as GSAP motion.
 
-Content is visible in baseline CSS; only decorative overlays start hidden. No data loading or authentication behavior was added.
+The motion shell preserves visible baseline content. Current API data loading and authentication are documented separately above and in the deployment guide; motion effects do not indicate API health.
 
 ## Responsive behavior
 
@@ -55,7 +59,7 @@ The temporary `.motion-check` directory can be removed after testing. The produc
 
 The operational row is now `BentoWorkspaces`: Products anchors a tall desktop panel, with Inventory, Orders, Customers, and Reports arranged alongside it. Each button has its own decorative SVG motif (laptop, storage boxes, document, people, layered report sheets), an explicit accessible navigation name, and an unavailable-data label. No diagrams represent live records or metrics.
 
-The system overview states **Backend: Not implemented**, **Authentication: Not configured**, and **Business data: Unavailable**, explicitly labeled as known development states rather than a health check.
+The system overview distinguishes API-backed catalog/stock and session-protected Admin access from unimplemented Orders/Reports. It is not a service health check.
 
 `src/motion/heroParallax.ts` extends the existing interaction context. Outer SVG wrappers handle pointer depth while the original inner groups retain assembly animation ownership. Fine-pointer motion is limited to 2–2.5 degrees of perspective and small layer offsets, with half strength on narrower hero panels. Bounds are cached on entry, pointer events coalesced into animation frames, and scroll/resize/cancel restore neutral positioning. Touch/coarse-pointer and reduced-motion users receive the static illustration. No animation loops or new runtime dependencies were added.
 

@@ -1,27 +1,28 @@
 # RXB API
 
-NestJS 12 API workspace with PostgreSQL-backed administrator sessions and catalog APIs. Physical inventory is represented as a count on each sellable product record; separate inventory-unit or serial-number tracking is not implemented.
+NestJS 12 API workspace with PostgreSQL-backed administrator sessions and catalog APIs. New laptops are registered as individually tracked units with unique normalized serial numbers; historical rows default to legacy quantity tracking until their real serials are entered. Accessories remain quantity based.
 
 ## Requirements and local configuration
 
 - Node.js 24.15+ and npm.
 - PostgreSQL for API runtime, migrations, and administrator provisioning.
 - Copy `.env.example` to `.env` inside `apps/api/` and replace the local placeholder values. Never commit `.env` or put database credentials in `VITE_` variables. `DATABASE_URL` is required at runtime.
+- Keep database URLs in the form `postgresql://<encoded-user>:<encoded-password>@<host>:<port>/<database>?schema=public`. Percent-encode reserved characters in the username and password separately (for example, `@` as `%40`, `#` as `%23`, and `%` as `%25`); do not encode the whole URL. The API runtime uses `DATABASE_URL`; Prisma CLI commands prefer `DIRECT_DATABASE_URL` and fall back to `DATABASE_URL`.
 - `CORS_ORIGINS` is a comma-separated allowlist of exact HTTP(S) origins; local defaults include Storefront `http://127.0.0.1:5183` and Admin `http://127.0.0.1:5184`. Production origins must use HTTPS.
-- `PORT` defaults to `5185` and the process binds only to `127.0.0.1`.
+- `PORT` defaults to `5185`; local development binds to `127.0.0.1`, while production binds to `0.0.0.0` and uses the host-provided port.
 - `PRODUCT_IMAGE_MAX_BYTES` defaults to `5242880` (5 MiB) and is capped at 25 MiB.
-- In development, uploaded files are written under `apps/api/.local-images/` (or `RXB_LOCAL_IMAGE_DIR`) using generated UUID filenames. This local disk provider is development-only; upload is intentionally disabled in production until an object-storage provider is configured. The folder is ignored by Git.
+- In development, uploaded files are written under `apps/api/.local-images/` (or `RXB_LOCAL_IMAGE_DIR`) using generated UUID filenames. Production requires Cloudinary and stores provider metadata in PostgreSQL; the credentials are server-only. The local image folder is ignored by Git.
 
 ## Prisma schema setup
 
-Prisma 7 uses the `prisma-client` generator and PostgreSQL driver adapter; `prisma.config.ts` reads `DATABASE_URL`. Schema validation and client generation do not connect to PostgreSQL:
+Prisma 7 uses the `prisma-client` generator and PostgreSQL driver adapter; `prisma.config.ts` prefers `DIRECT_DATABASE_URL` for CLI operations and falls back to `DATABASE_URL`. Schema validation and client generation do not connect to PostgreSQL:
 
 ```sh
 npm run prisma:validate --workspace @rxb/api
 npm run prisma:generate --workspace @rxb/api
 ```
 
-The schema contains administrator sessions, a shared product catalog, laptop-specific RAM/storage options and allowed combinations, image metadata, and an inventory adjustment audit trail. Product types are `LAPTOP`, `KEYBOARD`, `MOUSE`, `MOUSE_PAD`, and `OTHER_ACCESSORY`; laptop-only hardware fields are nullable so accessories do not need fabricated specifications. Accessory type-specific details are stored in the product `specs` JSONB column and validated against the selected product type. Migrations include `prisma/migrations/20261026190000_admin_auth_foundation/`, `prisma/migrations/20261027100000_product_catalog/`, `prisma/migrations/20261027113000_inventory_adjustments/`, `prisma/migrations/20261027120000_upgrade_combinations/`, `prisma/migrations/20261028130000_product_use_case/`, `prisma/migrations/20261028160000_accessory_products/`, and `prisma/migrations/20261028180000_accessory_product_specs/`. The accessory migrations preserve existing products as laptops and permit absent laptop fields; they must be applied before creating accessories. Before applying migrations, inspect the pending SQL and verify that the configured database is the intended target. `build` and `typecheck` generate the client first; they require `DATABASE_URL` to be available to Prisma configuration but do not connect.
+The schema contains administrator sessions, a shared product catalog with SKUs and admin-managed accessory categories, individually tracked laptop serials with an explicit legacy quantity mode, laptop-specific RAM/storage options and allowed combinations, ordered product image galleries with Cloudinary metadata, inventory adjustments, and append-only administrative audit events. Product types are `LAPTOP`, `KEYBOARD`, `MOUSE`, `MOUSE_PAD`, and `OTHER_ACCESSORY`; laptop-only hardware fields are nullable so accessories do not need fabricated specifications. Accessory type-specific details are stored in the product `specs` JSONB column and validated against the selected product type. Migrations include `prisma/migrations/20261026190000_admin_auth_foundation/`, `prisma/migrations/20261027100000_product_catalog/`, `prisma/migrations/20261027113000_inventory_adjustments/`, `prisma/migrations/20261027120000_upgrade_combinations/`, `prisma/migrations/20261028130000_product_use_case/`, `prisma/migrations/20261028160000_accessory_products/`, `prisma/migrations/20261028180000_accessory_product_specs/`, `prisma/migrations/20261029120000_individual_inventory_audit/`, `prisma/migrations/20261029150000_accessory_categories/`, `prisma/migrations/20261031120000_product_image_gallery/`, and `prisma/migrations/20261102100000_cloudinary_product_images/`. The inventory migration adds serial tracking (new laptops are registered as individually tracked units; pre-existing rows stay in legacy quantity mode) and the audit-event table written by product, inventory, hardware-change, and sign-in/session operations (category changes are not audited). The accessory category migration seeds six default categories. The Cloudinary migration adds nullable image metadata without removing existing image rows. Before applying migrations, inspect the pending SQL and verify that the configured database is the intended target. `build` and `typecheck` generate the client first; they require one database URL to be available to Prisma configuration but do not connect.
 
 ### Product APIs and pricing
 
@@ -30,9 +31,9 @@ The schema contains administrator sessions, a shared product catalog, laptop-spe
 - A product record represents one sellable item in a supported product type. New and pre-owned examples of the same model are separate records and each gets a unique slug. `useCase` is laptop-only, one of `WORK`, `STUDY`, or `GAMING`, and is not inferred from specifications. `stockQuantity` counts complete physical units of that product; laptop upgrade-component stock is not added, so quantity is not double-counted.
 - Accessory `specs` are product-type-specific: keyboard fields are `keyboardType`, `connection`, `layout`, and `backlight`; mouse fields are `connection`, `dpi`, `buttonCount`, and `color`; mouse-pad fields are `size`, `material`, and `color`; other accessories use `categoryName` and optional `additionalNotes`. The API rejects missing required fields, unsupported values, unknown keys, and laptop specs on accessory records (or accessory specs on laptops).
 - CPU/GPU are fixed catalog fields. RAM/storage options and their explicitly allowed pairs are attached to each product. The API requires one available zero-difference base option in each dimension and an available base pair, matching the declared base configuration. Public catalog responses include only options participating in an allowed pair; quotes validate the selected pair and calculate `priceMinor + RAM difference + storage difference` on the server. Quotes are informational and do not assert physical stock availability. Prices use integer minor units (EGP piastres); no client total is accepted.
-- Admin inventory changes require a reason and write the previous/new physical product quantity and acting Admin to `InventoryAdjustment` in the same database transaction as the product count update. A concurrent change is rejected for refresh rather than silently overwriting a newer count. The history is internal; public responses expose availability only.
+- Legacy quantity adjustments require a reason and write previous/new quantity and actor to `InventoryAdjustment` transactionally. Individual laptops are registered with a real serial, can be marked sold or removed exactly once, and hardware changes require an explicit reasoned operation; the important record and audit event share a transaction. A concurrent change is rejected for refresh rather than silently overwriting a newer count. The history is internal; public responses expose availability only.
 - Public responses omit exact stock quantity and storage keys. They expose only a boolean availability flag and active options. This milestone does not create cart/order snapshots or business records.
-- `GET /api/admin/products` supports database-side text/specification filters, price bounds, condition/status/use-case filters, sorting, and bounded pagination. Inventory tracks product-level quantities and adjustments; it does not track physical laptop serial numbers.
+- `GET /api/admin/products` supports database-side text/specification/serial filters, price bounds, condition/status/use-case filters, sorting, and bounded pagination. `GET /api/admin/products/audit` provides role-protected, read-only, filtered server-side pages. Audit records are protected from edits through application routes, but database owners can still alter them. Sign-in and revocation events are best effort and are written after the session operation; a database failure at that point can leave a session event missing.
 
 ### Clearly labeled local sample catalog
 
@@ -50,7 +51,7 @@ The script refuses production, any database other than `rxb_dev`, and existing s
 
 `POST /api/admin/images` accepts raw `application/octet-stream` bytes, requires an authenticated Admin session plus Origin/CSRF checks, and uses Express's bounded raw body parser (oversize requests return 413). The service checks JPEG/PNG/WebP structure and signatures. It does not invoke Multer. The browser-provided filename and MIME type are ignored; server-generated UUID keys are used. Public bytes are served through `GET /api/public/images/:id` after a database lookup with `Cross-Origin-Resource-Policy: cross-origin`, because public images are embedded by the separate Admin and Storefront origins. Unattached uploaded images can be removed through authenticated `DELETE /api/admin/images/:id`; images attached to products cannot be removed directly.
 
-The local filesystem implementation is suitable only for development or a single local preview. A production deployment still needs a reviewed object-storage adapter, private bucket configuration, lifecycle/cleanup behavior, and tests. It is not currently configured or production-ready. Replacing/removing an image detaches or removes its database record before filesystem cleanup; a cleanup failure can leave an orphaned generated file, but cannot leave a product pointing at a removed file. A failed DB insert after file write can also leave an orphan if filesystem cleanup itself fails.
+Local development stores image bytes under `.local-images/`. Production requires all three server-only Cloudinary variables (`CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET`) and uploads signed requests to Cloudinary; the API stores the provider public ID and secure URL with the existing image metadata and redirects the stable public image route. Uploads are limited by `PRODUCT_IMAGE_MAX_BYTES` and validated as JPEG, PNG, or WebP from their bytes. Cloudinary provider errors are returned generically and logged without credentials or provider response bodies. Removing an image deletes its database record before remote cleanup; if cleanup fails, the API reports the failure and the Cloudinary asset may need manual cleanup. Existing local image files are not automatically copied to Cloudinary.
 
 ### Storefront catalog
 
@@ -72,7 +73,7 @@ The CLI prompts interactively for an email and masked password (minimum 12 chara
 - `GET /api/auth/session`: validates the cookie against the server-side session and returns a safe identity plus a CSRF token.
 - `POST /api/auth/logout`: requires the active session, matching allowed `Origin`, and `X-CSRF-Token`; revokes the database session and clears the cookie.
 - Passwords use Argon2id (19 MiB memory, 2 iterations, parallelism 1). Invalid credentials use a generic 401 response.
-- The `rxb_admin_session` cookie is `HttpOnly`, `SameSite=Lax`, scoped to `/api/auth`, and `Secure` in production. Only its SHA-256 verifier is stored in the database. CSRF tokens are kept in the server-side session and in Admin React memory, never browser storage.
+- The `rxb_admin_session` cookie is `HttpOnly`, `SameSite=Lax`, scoped to `/api` so it reaches authenticated Admin API routes, and `Secure` in production. It is host-only; no parent-domain cookie is set. Only its SHA-256 verifier is stored in the database. CSRF tokens are kept in the server-side session and in Admin React memory, never browser storage.
 - Protected catalog and inventory routes use both `SessionGuard` and `RolesGuard` with explicit `@Roles(...)` metadata. Every mutation also requires Origin and CSRF validation.
 
 ## Rate limits and proxy configuration
@@ -92,6 +93,6 @@ npm run test:api
 npm run build:api
 ```
 
-`GET http://127.0.0.1:5185/api/health` returns `{"status":"ok"}` and reports API process status only; it is not a database health check. Auth tests use an in-memory Prisma test double; no real database is used by those tests.
+`GET http://127.0.0.1:5185/api/health` returns `{"status":"ok"}` and reports API process status only. `GET /api/ready` returns readiness only when a database query succeeds. Auth and image tests use in-memory Prisma doubles and mocked Cloudinary responses; no real database or Cloudinary account is used by those tests.
 
 Build output stays in the dedicated `.phase1-build/` folder. Older local `build/`, `dist/`, and `generated/` directories are preserved.

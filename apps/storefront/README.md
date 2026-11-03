@@ -2,6 +2,8 @@
 
 Customer-facing React + TypeScript + Vite application. The original logo and logo-assembly components are served from `public/`.
 
+Local development uses `http://127.0.0.1:5185/api` when `VITE_API_BASE_URL` is unset. Production builds require `VITE_API_BASE_URL` to be an absolute HTTPS API URL ending in `/api`; Vite embeds this value into the browser bundle at build time. It is public configuration, never a place for API credentials or other secrets.
+
 From the monorepo root, use `npm run dev:storefront` to start the development server, `npm run build:storefront` to build, or `npm run preview:storefront` to preview a build.
 
 The Storefront reads published laptops and supported accessory types from `/api/public/products`, with product details and laptop configuration quotes from the matching public endpoints. `VITE_API_BASE_URL` may override the default API base URL. WhatsApp inquiries use the RXB Egypt business number from `src/config/business-contact.ts`; this single contact configuration powers product-specific inquiries, the footer link, and the floating general contact button.
