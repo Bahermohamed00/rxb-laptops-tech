@@ -1,0 +1,34 @@
+# Render Blueprint for the RXB NestJS API (Free instance).
+# Secrets use `sync: false`: Render asks for their values in the dashboard
+# when the Blueprint is created. Never commit real values here.
+services:
+  - type: web
+    name: rxb-api
+    runtime: node
+    plan: free
+    branch: release/v1.0.0
+    autoDeploy: false
+    # prisma and typescript are devDependencies; NODE_ENV=production would
+    # otherwise make `npm ci` skip them and the build would fail.
+    buildCommand: npm ci --include=dev && npm run build:api
+    startCommand: npm run start:api
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 24.15.0
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY_HOPS
+        value: "1"
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_DATABASE_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false

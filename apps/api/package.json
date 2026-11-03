@@ -16,7 +16,8 @@
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate",
     "seed:samples": "npm run prisma:generate && npm run build && node .phase1-build/scripts/seed-sample-catalog.js",
-    "admin:create": "npm run build && node .phase1-build/scripts/create-admin.js"
+    "admin:create": "npm run build && node .phase1-build/scripts/create-admin.js",
+    "db:check-empty": "node scripts/check-empty-database.mjs"
   },
   "dependencies": {
     "@inquirer/prompts": "^8.7.2",

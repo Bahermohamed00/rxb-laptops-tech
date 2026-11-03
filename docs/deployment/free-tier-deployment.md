@@ -4,6 +4,20 @@ This guide prepares the existing monorepo for separate Cloudflare Pages Storefro
 
 The result is a **catalog and inquiry/testing deployment**, not a complete online store. Provider free-tier limits, sleeping/cold starts, storage quotas, and availability can change; confirm current provider terms before use.
 
+The tested release is the GitHub branch `release/v1.0.0`. Deploy only from that branch (or a later reviewed commit on it), never from a local working copy.
+
+## Go-live runbook: when each account is needed
+
+Do the steps in this order. Each step names the account it needs; nothing earlier requires any account. Enter secrets directly into the provider dashboards; never paste them into chat, Git, or this guide.
+
+1. **Neon (account needed).** Create a *new* project (for example `rxb-production`, PostgreSQL 16 or newer, a nearby region). Copy the pooled connection string (`DATABASE_URL`) and the direct/non-pooled one (`DIRECT_DATABASE_URL`) into a local, git-ignored file `apps/api/.env.production.local` on the release machine. Confirm the database is new and empty (see "Production migrations and first Admin"), then run the migrations. No other account is needed for this step.
+2. **Cloudinary (account needed).** Create a free account and note the cloud name, API key, and API secret (Settings → API Keys). They are only entered into Render in step 3.
+3. **Render (account needed, GitHub access).** New → Blueprint → select this repository; Render reads `render.yaml` (Free web service `rxb-api`, branch `release/v1.0.0`). Fill the prompted secrets: both Neon URLs, the three Cloudinary values, and `CORS_ORIGINS` (use a placeholder such as `https://rxb-storefront.pages.dev,https://rxb-admin.pages.dev` and correct it in step 5 once the Pages names are final). Deploy and wait for `https://<service>.onrender.com/api/ready` to return 200.
+4. **Cloudflare (account needed, GitHub access).** Create the two Pages projects described below (Storefront and Admin). Their variables need the Render URL from step 3.
+5. **Render again.** Set `CORS_ORIGINS` to the exact final Storefront and Admin `https://….pages.dev` origins and redeploy.
+6. **First Admin.** From the release machine, run `npm run create:admin` with `DATABASE_URL` pointing to Neon (it prompts for a masked password; never pass it on the command line).
+7. **Verify** with the checklist at the end of this guide.
+
 ## Application scope
 
 | Area | Current status |
@@ -23,15 +37,13 @@ The result is a **catalog and inquiry/testing deployment**, not a complete onlin
 
 ## Domain and cookie requirements
 
-Use three HTTPS custom subdomains under one registrable domain, for example:
+The Admin session cookie is `HttpOnly`, `Secure` in production, `SameSite=Lax`, host-only, and scoped to `Path=/api`. Provider defaults such as `*.pages.dev` and `*.onrender.com` are unrelated sites, so a browser may refuse that cookie if the Admin calls Render directly.
 
-- Storefront: `shop.example.com`
-- Admin: `admin.example.com`
-- API: `api.example.com` (custom domain mapped to Render)
+**Default free domains (this release):** the Admin Pages project ships `apps/admin/public/_worker.js`, a Cloudflare Pages advanced-mode worker that proxies same-origin `https://<admin>.pages.dev/api/*` to the Render API. The browser only talks to the Admin origin, so the cookie is first-party. The worker preserves `Origin`, `Cookie`, and `X-CSRF-Token` (the API Origin and CSRF guards still apply), replaces any client-supplied `X-Forwarded-For` with Cloudflare's `CF-Connecting-IP`, strips CORS response headers (not needed same-origin), and serves `index.html` for unknown non-API paths. The Storefront needs no cookies and calls Render directly.
 
-The Admin session cookie is host-only for the API, `HttpOnly`, `Secure` in production, and `SameSite=Lax`. No broad cookie `Domain` is needed for sibling subdomains. Cross-origin requests from Admin to API are same-site when all use HTTPS under the same registrable domain.
+Known limitation: with `TRUST_PROXY_HOPS=1`, Admin requests that pass through the worker are rate-limited by Cloudflare's egress address rather than the end user's address, so Admin login attempts share buckets per Cloudflare egress IP. This is acceptable for a small team; revisit before wider use.
 
-Provider defaults such as `*.pages.dev` and `*.onrender.com` are unrelated sites. Do **not** assume the Admin cookie will work between those default domains: browser third-party-cookie restrictions can block it. Configure custom domains before testing Admin authentication. The API uses an explicit CORS origin allowlist; never use `*` with credentials.
+**Custom domain (optional, later):** with three HTTPS subdomains under one registrable domain (for example `shop.`, `admin.`, `api.`), the Admin can call the API host directly and the proxy is unnecessary. The API uses an explicit CORS origin allowlist; never use `*` with credentials.
 
 ## Environment variables
 
@@ -47,7 +59,9 @@ There are no other used Storefront `VITE_` variables. WhatsApp contact configura
 
 | Variable | Required | Visibility / timing |
 |---|---|---|
-| `VITE_API_BASE_URL` | Yes for production | Public browser configuration, embedded at build time. Use the same HTTPS API URL ending in `/api`. No credentials or secrets. |
+| `VITE_API_BASE_URL` | Yes for production | Public, embedded at build time. With the default-domain proxy, use the Admin's **own** origin: `https://<admin-project>.pages.dev/api`. No credentials or secrets. |
+| `API_ORIGIN` | Yes with the proxy | Runtime variable for `_worker.js` (not `VITE_`, never in the bundle). The Render origin only, for example `https://rxb-api.onrender.com`, with no path. HTTPS is required; plain HTTP is accepted only for loopback testing. |
+| `NODE_VERSION` | Recommended | Build-time; set to `24.15.0` to match the API workspace engine. |
 
 There are no other used Admin `VITE_` variables. The session cookie and CSRF token are handled by the browser/API; no secret is placed in browser storage.
 
@@ -59,7 +73,7 @@ There are no other used Admin `VITE_` variables. The session cookie and CSRF tok
 | `PORT` | Supplied by Render | Runtime listener port. The API binds to `0.0.0.0` in production and uses the supplied port. |
 | `DATABASE_URL` | Yes | **Server-only secret.** Neon pooled PostgreSQL URL for API runtime; preserve provider TLS parameters. |
 | `DIRECT_DATABASE_URL` | Recommended | **Server-only secret.** Neon direct/non-pooled URL. Prisma migration commands prefer this URL; when omitted they fall back to `DATABASE_URL`. |
-| `CORS_ORIGINS` | Yes | Exact HTTPS Storefront and Admin origins, comma-separated; do not include paths, trailing slashes, wildcards, or API origin. |
+| `CORS_ORIGINS` | Yes | Exact HTTPS Storefront and Admin origins, comma-separated (for example `https://rxb-storefront.pages.dev,https://rxb-admin.pages.dev`); do not include paths, trailing slashes, wildcards, or the API origin. The Admin origin is required even with the proxy because the API Origin guard checks it. |
 | `CLOUDINARY_CLOUD_NAME` | Yes in production | Server-side Cloudinary account setting. |
 | `CLOUDINARY_API_KEY` | Yes in production | Server-only credential. |
 | `CLOUDINARY_API_SECRET` | Yes in production | Server-only secret. Never expose it to Vite or logs. |
@@ -81,8 +95,8 @@ Create a separate Pages project connected to this repository:
 2. Framework preset: Vite (or static site).
 3. Build command: `npm run build:storefront`.
 4. Build output directory: `apps/storefront/dist`.
-5. Add production environment variable `VITE_API_BASE_URL` with the API HTTPS base URL ending in `/api`; configure a separate preview value if previews should use a different API.
-6. Bind the project to `shop.example.com`.
+5. Add production environment variables `VITE_API_BASE_URL` = `https://<render-service>.onrender.com/api` and `NODE_VERSION` = `24.15.0`; configure a separate preview value if previews should use a different API.
+6. Optionally bind a custom domain later; the default `https://<project>.pages.dev` works.
 7. Verify `apps/storefront/public/_redirects` is included in the output. It rewrites client routes to `index.html` without affecting API traffic, because the API is a separate host.
 
 The Storefront production Vite configuration fails the build if `VITE_API_BASE_URL` is missing, malformed, non-HTTPS, or not rooted at `/api`. Local development alone retains the localhost default.
@@ -95,23 +109,23 @@ Create another Pages project for the same repository (do not combine it with Sto
 2. Framework preset: Vite (or static site).
 3. Build command: `npm run build:admin`.
 4. Build output directory: `apps/admin/dist`.
-5. Add production `VITE_API_BASE_URL` using the API HTTPS base URL ending in `/api`.
-6. Bind the project to `admin.example.com`.
-7. Verify `apps/admin/public/_redirects` is included. Admin routes use URL hashes; the fallback also keeps the app entry available on reload.
+5. Environment variables (Production): `VITE_API_BASE_URL` = `https://<admin-project>.pages.dev/api`, `API_ORIGIN` = `https://<render-service>.onrender.com`, `NODE_VERSION` = `24.15.0`.
+6. Confirm the deployment includes `_worker.js` (advanced mode). `https://<admin-project>.pages.dev/api/health` must return the API health JSON.
+7. Admin routes use URL hashes; the worker serves `index.html` for unknown non-API paths, so reloads work.
 
-Vite embeds both projects’ `VITE_API_BASE_URL` values at build time. Changing a Pages environment variable requires a new build/deployment. These variables are public; do not add database, Cloudinary, or other server credentials.
+Vite embeds `VITE_API_BASE_URL` at build time, so changing it requires a new deployment. `API_ORIGIN` is read by the worker at runtime. None of these values are secrets; never add database, Cloudinary, or other server credentials to Pages.
 
 ## Render: NestJS API
 
-Create a single Render Web Service from this repository:
+Create a single Render Web Service from this repository. The committed `render.yaml` Blueprint encodes the settings below (Free plan, branch `release/v1.0.0`, auto-deploy off):
 
 1. Root directory: repository root.
 2. Runtime: Node.js; use Node `24.15.0` or newer compatible with the API workspace engine.
-3. Build command: `npm ci && npm run build:api`.
+3. Build command: `npm ci --include=dev && npm run build:api`. (`--include=dev` is required: with `NODE_ENV=production`, plain `npm ci` skips the `prisma` and `typescript` dev dependencies and the build fails.)
 4. Start command: `npm run start:api`.
 5. Health-check path: `/api/health` (process liveness only).
 6. Set the server environment variables above, including the host-supplied `PORT`, production origins, `NODE_ENV=production`, and all Cloudinary credentials.
-7. Configure the Render custom domain `api.example.com` and HTTPS.
+7. The default `https://<service>.onrender.com` URL is sufficient; a custom domain is optional. The Free instance sleeps after inactivity, so the first request after idle can take up to about a minute.
 8. Use one API instance. Global and login rate limits are process-local memory, so multiple instances have separate counters and do not provide a shared limit.
 
 The root `start:api` script runs the API workspace start command; its `node .phase1-build/main.js` path is resolved from the API workspace directory. Production startup binds to `0.0.0.0`; development stays on `127.0.0.1`. API startup connects to PostgreSQL and fails closed if the database cannot be reached. `/api/ready` returns 503 when its database probe fails and does not reveal the underlying error.
@@ -125,7 +139,7 @@ Create a PostgreSQL project/database in Neon. Keep both connection strings serve
 - `DATABASE_URL`: use Neon’s pooled endpoint (hostname commonly includes `-pooler`) for the long-running API connection.
 - `DIRECT_DATABASE_URL`: use Neon’s direct/non-pooled endpoint for Prisma schema migrations and administrative operations.
 
-Keep the TLS/SSL parameters provided by Neon and URL-encode reserved characters in credentials. Prisma 7 is configured with the PostgreSQL driver adapter `@prisma/adapter-pg`; the Prisma CLI uses the direct URL when available. No database or hosted endpoint was provisioned during this task.
+Keep the TLS/SSL parameters provided by Neon and URL-encode reserved characters in credentials. The `pg` driver treats `sslmode=require` as full certificate verification and logs a deprecation warning; replacing it with `sslmode=verify-full` keeps the same behavior without the warning (Neon uses publicly trusted certificates). Prisma 7 is configured with the PostgreSQL driver adapter `@prisma/adapter-pg`; the Prisma CLI uses the direct URL when available. No database or hosted endpoint was provisioned during this task.
 
 ## Cloudinary
 
@@ -141,21 +155,31 @@ The release migration history is, in order: `20261026190000_admin_auth_foundatio
 
 Before any real migration:
 
-1. Review every pending SQL file and confirm the target Neon project/database and backup/recovery plan.
-2. The complete migration history was verified against a temporary, isolated PostgreSQL 16 container bound only to `127.0.0.1:55439`. All eleven migrations applied in order with the Prisma deploy workflow; Prisma reported the database current, and the final Prisma schema diff was empty. The container was stopped and removed. This verifies a fresh database, not an existing database with user data.
-3. Set `DIRECT_DATABASE_URL` to the intended Neon direct endpoint in the trusted release environment; verify the destination identity without printing credentials.
-4. Run `npm run migrate:status:api`, inspect the result, then run `npm run migrate:deploy:api` as a deliberate release operation.
-5. Only after migration success, deploy the API and provision the first Admin interactively with `npm run create:admin` from an authorized environment using the intended API `DATABASE_URL`. The command prompts for a masked password, hashes it with Argon2id, and refuses if any Admin exists. Never pass the password on a command line or use sample credentials.
+1. Review every pending SQL file and confirm the target is the **new** Neon production project.
+2. Put both Neon URLs in `apps/api/.env.production.local` (git-ignored by the `.env.*` rule). Prisma's `dotenv/config` only loads `apps/api/.env` (your local development database) and never overrides variables already set, so export the production file into the shell explicitly:
 
-No existing local or hosted database was contacted or modified. The only `migrate deploy` run targeted the disposable PostgreSQL container described above. `prisma validate`, client generation, builds, and typechecks do not apply migrations.
+   ```bash
+   set -a; . apps/api/.env.production.local; set +a   # from the repository root, on the release checkout
+   npm run db:check-empty:api      # read-only; prints host + database name only; must print EMPTY
+   npm run migrate:status:api      # must list all eleven migrations as not yet applied
+   npm run migrate:deploy:api      # the deliberate release operation
+   npm run migrate:status:api      # must report "Database schema is up to date!"
+   ```
+
+   Stop if `db:check-empty:api` reports anything other than EMPTY, or if the printed host/database is not the new Neon project. Never use `prisma db push` or `prisma migrate dev` against production.
+3. Only after migration success, deploy the API and provision the first Admin interactively with `npm run create:admin` (same shell, so `DATABASE_URL` points to Neon). The command prompts for a masked password, hashes it with Argon2id, and refuses if any Admin exists. Never pass the password on a command line or use sample credentials. Close the shell afterwards so the production URLs do not linger.
+
+Release verification (2026-11-03): all eleven migrations applied in order to fresh, empty, disposable PostgreSQL 16 containers bound to `127.0.0.1` (from the working tree and again from a fresh clone of `release/v1.0.0`); Prisma reported the schema current and `prisma migrate diff` against `schema.prisma` was empty. This verifies fresh databases, not an existing database with user data. No hosted database was contacted.
 
 ## Deployment verification
 
-After the infrastructure is created, verify:
+After the infrastructure is created, verify in a real browser (do not infer cookie behavior from Node tests alone):
 
-1. `GET https://api.example.com/api/health` returns process status and `GET https://api.example.com/api/ready` returns readiness only when PostgreSQL is reachable.
-2. Storefront catalog/details and product-image redirects load; direct-load and refresh `/about` and `/products/<slug>`.
-3. Admin login sets a `Secure; HttpOnly; SameSite=Lax` cookie; session refresh, logout, wrong-Origin rejection, CSRF rejection, and protected routes behave as expected.
-4. Add/edit/archive a test product, adjust quantity with reason, and upload/view/delete an unattached test image.
-5. Confirm the Admin pages for Orders, Customers, and Reports remain placeholders and do not advertise checkout or payments.
-6. Test from current Chrome/Safari/Firefox browsers with custom sibling domains; do not infer cookie behavior from automated Node tests alone.
+1. `https://<service>.onrender.com/api/health` returns process status and `/api/ready` returns 200 only when Neon is reachable. Expect the first request after idle to be slow (Free instance cold start).
+2. `https://<admin-project>.pages.dev/api/health` returns the same JSON through the Admin proxy.
+3. Storefront home and `/laptops` load products from Neon; direct-load and refresh `/about`, `/laptops`, and `/products/<slug>`.
+4. A product image uploaded in Admin is served from `res.cloudinary.com` (the API's `/api/public/images/:id` responds with a redirect) on both Admin and Storefront.
+5. Admin login sets a `Secure; HttpOnly; SameSite=Lax` cookie on the Admin origin with `Path=/api`; reload keeps the session; logout ends it.
+6. Create a laptop with a serial number and an accessory in a category; adjust accessory quantity with a reason; mark the laptop SOLD; confirm the Audit page lists these actions and the Overview counts change. Upload, view, and delete an unattached test image.
+7. Confirm Orders, Customers, and Reports remain placeholders and nothing advertises checkout or payment.
+8. Check the browser console and network panels for errors on each page; the only expected 401 is the session check before sign-in.

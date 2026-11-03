@@ -21,6 +21,7 @@
     "migrate:deploy:api": "npm run migrate:deploy --workspace @rxb/api",
     "migrate:status:api": "npm run migrate:status --workspace @rxb/api",
     "create:admin": "npm run admin:create --workspace @rxb/api",
-    "seed:sample-products": "npm run seed:samples --workspace @rxb/api"
+    "seed:sample-products": "npm run seed:samples --workspace @rxb/api",
+    "db:check-empty:api": "npm run db:check-empty --workspace @rxb/api"
   }
 }
