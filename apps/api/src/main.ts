@@ -13,7 +13,12 @@ async function bootstrap(): Promise<void> {
   const environment = validateEnvironment(process.env);
   configureApiApp(app, environment);
   app.enableShutdownHooks();
-  await app.listen(environment.PORT, '127.0.0.1');
+  const host = environment.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1';
+  await app.listen(environment.PORT, host);
 }
 
-void bootstrap();
+void bootstrap().catch(error => {
+  const failureType = error instanceof Error ? error.constructor.name : typeof error;
+  console.error(`API startup failed (${failureType}). Check service configuration and database availability.`);
+  process.exitCode = 1;
+});

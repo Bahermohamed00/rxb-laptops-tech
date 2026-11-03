@@ -1,8 +1,14 @@
+import { validateDatabaseUrl } from './database-url.js';
+
 export interface ApiEnvironment {
   NODE_ENV: 'development' | 'test' | 'production';
   PORT: number;
   DATABASE_URL: string;
+  DIRECT_DATABASE_URL?: string;
   CORS_ORIGINS: string[];
+  CLOUDINARY_CLOUD_NAME?: string;
+  CLOUDINARY_API_KEY?: string;
+  CLOUDINARY_API_SECRET?: string;
   API_RATE_LIMIT: number;
   API_RATE_TTL_MS: number;
   AUTH_LOGIN_LIMIT: number;
@@ -22,11 +28,20 @@ export function validateEnvironment(config: Record<string, unknown>): ApiEnviron
   const nodeEnv = String(config.NODE_ENV ?? 'development');
   if (!['development', 'test', 'production'].includes(nodeEnv)) throw new Error('NODE_ENV must be development, test, or production.');
 
-  const databaseUrl = String(config.DATABASE_URL ?? '');
-  let database: URL;
-  try { database = new URL(databaseUrl); } catch { throw new Error('DATABASE_URL must be a valid PostgreSQL connection URL.'); }
-  if (database.protocol !== 'postgresql:' && database.protocol !== 'postgres:') throw new Error('DATABASE_URL must use PostgreSQL.');
-
+  const databaseUrl = validateDatabaseUrl(String(config.DATABASE_URL ?? ''));
+  const directDatabaseUrl = config.DIRECT_DATABASE_URL ? validateDatabaseUrl(String(config.DIRECT_DATABASE_URL)) : undefined;
+  const cloudinary = {
+    CLOUDINARY_CLOUD_NAME: String(config.CLOUDINARY_CLOUD_NAME ?? '').trim(),
+    CLOUDINARY_API_KEY: String(config.CLOUDINARY_API_KEY ?? '').trim(),
+    CLOUDINARY_API_SECRET: String(config.CLOUDINARY_API_SECRET ?? '').trim(),
+  };
+  const configuredCloudinary = Object.values(cloudinary).filter(Boolean).length;
+  if (configuredCloudinary !== 0 && configuredCloudinary !== 3) {
+    throw new Error('CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET must be configured together.');
+  }
+  if (cloudinary.CLOUDINARY_CLOUD_NAME && !/^[a-z0-9-]+$/.test(cloudinary.CLOUDINARY_CLOUD_NAME)) {
+    throw new Error('CLOUDINARY_CLOUD_NAME must contain only lowercase letters, numbers, and hyphens.');
+  }
   const configuredOrigins = String(config.CORS_ORIGINS ?? 'http://127.0.0.1:5183,http://127.0.0.1:5184');
   const corsOrigins = configuredOrigins.split(',').map(origin => origin.trim()).filter(Boolean);
   if (!corsOrigins.length || corsOrigins.includes('*')) throw new Error('CORS_ORIGINS must contain explicit origins and cannot contain a wildcard.');
@@ -36,6 +51,9 @@ export function validateEnvironment(config: Record<string, unknown>): ApiEnviron
     if (!['http:', 'https:'].includes(parsed.protocol) || parsed.origin !== origin) throw new Error('CORS_ORIGINS values must be origin-only HTTP or HTTPS URLs.');
   }
   if (nodeEnv === 'production' && corsOrigins.some(origin => origin.startsWith('http://'))) throw new Error('Production CORS origins must use HTTPS.');
+  if (nodeEnv === 'production' && configuredCloudinary !== 3) {
+    throw new Error('Cloudinary credentials are required in production.');
+  }
 
   const port = integer(config.PORT as string | undefined, 5185, 'PORT');
   if (port > 65_535) throw new Error('PORT must be between 1 and 65535.');
@@ -48,7 +66,9 @@ export function validateEnvironment(config: Record<string, unknown>): ApiEnviron
     NODE_ENV: nodeEnv as ApiEnvironment['NODE_ENV'],
     PORT: port,
     DATABASE_URL: databaseUrl,
+    ...(directDatabaseUrl ? { DIRECT_DATABASE_URL: directDatabaseUrl } : {}),
     CORS_ORIGINS: corsOrigins,
+    ...(configuredCloudinary === 3 ? cloudinary : {}),
     API_RATE_LIMIT: integer(config.API_RATE_LIMIT as string | undefined, 100, 'API_RATE_LIMIT'),
     API_RATE_TTL_MS: integer(config.API_RATE_TTL_MS as string | undefined, 60_000, 'API_RATE_TTL_MS'),
     AUTH_LOGIN_LIMIT: integer(config.AUTH_LOGIN_LIMIT as string | undefined, 5, 'AUTH_LOGIN_LIMIT'),

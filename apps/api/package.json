@@ -11,6 +11,8 @@
     "start": "node .phase1-build/main.js",
     "typecheck": "npm run prisma:generate && tsc --project tsconfig.build.json --noEmit",
     "test": "npm run build && node --test test/*.test.mjs",
+    "migrate:deploy": "prisma migrate deploy",
+    "migrate:status": "prisma migrate status",
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate",
     "seed:samples": "npm run prisma:generate && npm run build && node .phase1-build/scripts/seed-sample-catalog.js",
