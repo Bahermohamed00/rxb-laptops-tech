@@ -211,6 +211,8 @@ model ProductImage {
   productId    String?  @db.Uuid
   position     Int      @default(0)
   storageKey   String   @unique @db.VarChar(100)
+  cloudinaryPublicId String? @unique @db.VarChar(255)
+  cloudinarySecureUrl String? @db.VarChar(2048)
   contentType  String   @db.VarChar(32)
   byteSize     Int
   createdAt    DateTime @default(now()) @db.Timestamptz(3)

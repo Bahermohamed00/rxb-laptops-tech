@@ -1,19 +1,21 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException, PayloadTooLargeException, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, PayloadTooLargeException, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import type { Request } from 'express';
 import { PrismaService } from '../../prisma/prisma.service.js';
+import { CloudinaryStorageError, deleteCloudinaryImage, isCloudinarySecureUrl, uploadCloudinaryImage } from './cloudinary-storage.js';
 
 const imageRoot = () => resolve(process.env.RXB_LOCAL_IMAGE_DIR || join(process.cwd(), '.local-images'));
 
 @Injectable()
 export class ImagesService {
+  private readonly logger = new Logger(ImagesService.name);
+
   constructor(private readonly prisma: PrismaService, private readonly config: ConfigService) {}
 
   async upload(request: Request) {
-    if (this.config.getOrThrow('NODE_ENV') === 'production') throw new ServiceUnavailableException('Image uploads require configured object storage in production.');
     if (request.headers['content-type'] !== 'application/octet-stream') throw new BadRequestException('Upload the image as application/octet-stream.');
     const maxBytes = this.config.getOrThrow<number>('PRODUCT_IMAGE_MAX_BYTES');
     const chunks: Buffer[] = [];
@@ -35,6 +37,38 @@ export class ImagesService {
     const format = sniffImage(bytes);
     if (!format) throw new BadRequestException('Use a valid JPEG, PNG, or WebP image.');
     const storageKey = `${randomUUID()}.${format.extension}`;
+    if (this.config.getOrThrow('NODE_ENV') === 'production') {
+      const publicId = randomUUID();
+      const credentials = this.cloudinaryCredentials();
+      let cloudinaryImage: Awaited<ReturnType<typeof uploadCloudinaryImage>>;
+      try {
+        cloudinaryImage = await uploadCloudinaryImage(credentials, bytes, format.contentType, publicId);
+      } catch (error) {
+        this.logCloudinaryFailure('upload', error);
+        throw new ServiceUnavailableException('Image storage is temporarily unavailable.');
+      }
+
+      try {
+        const image = await this.prisma.productImage.create({
+          data: {
+            storageKey,
+            contentType: format.contentType,
+            byteSize: size,
+            cloudinaryPublicId: cloudinaryImage.publicId,
+            cloudinarySecureUrl: cloudinaryImage.secureUrl,
+          },
+        });
+        return { id: image.id, imageUrl: `/api/public/images/${image.id}` };
+      } catch (error) {
+        try {
+          await deleteCloudinaryImage(credentials, cloudinaryImage.publicId);
+        } catch (cleanupError) {
+          this.logCloudinaryFailure('cleanup after metadata failure', cleanupError);
+        }
+        throw error;
+      }
+    }
+
     const root = imageRoot();
     await mkdir(root, { recursive: true });
     const target = resolve(root, storageKey);
@@ -54,6 +88,16 @@ export class ImagesService {
   async read(id: string) {
     const image = await this.prisma.productImage.findUnique({ where: { id } });
     if (!image || !/^[0-9a-f-]{36}\.(jpg|png|webp)$/.test(image.storageKey)) throw new NotFoundException('Image not found.');
+    if (image.cloudinaryPublicId || image.cloudinarySecureUrl) {
+      const cloudName = this.config.getOrThrow<string>('CLOUDINARY_CLOUD_NAME');
+      if (!image.cloudinaryPublicId
+        || !/^rxb-products\/[0-9a-f-]{36}$/.test(image.cloudinaryPublicId)
+        || !image.cloudinarySecureUrl
+        || !isCloudinarySecureUrl(image.cloudinarySecureUrl, cloudName)) {
+        throw new NotFoundException('Image not found.');
+      }
+      return { image, redirectUrl: image.cloudinarySecureUrl };
+    }
     try { return { image, bytes: await readFile(resolve(imageRoot(), image.storageKey)) }; }
     catch { throw new NotFoundException('Image not found.'); }
   }
@@ -63,11 +107,47 @@ export class ImagesService {
     if (!image) return;
     if (image.productId) throw new ConflictException('This image is attached to a product.');
     if (!/^[0-9a-f-]{36}\.(jpg|png|webp)$/.test(image.storageKey)) throw new NotFoundException('Image not found.');
+    if (image.cloudinaryPublicId) {
+      await this.prisma.$transaction(async tx => {
+        const locked = await tx.$queryRaw<{ id: string }[]>`SELECT "id" FROM "ProductImage" WHERE "id" = ${id}::uuid FOR UPDATE`;
+        if (!locked.length) return;
+
+        const current = await tx.productImage.findUnique({ where: { id } });
+        if (!current) return;
+        if (current.productId) throw new ConflictException('This image is attached to a product.');
+        if (!current.cloudinaryPublicId) throw new ConflictException('This image storage configuration changed. Retry the request.');
+
+        try {
+          await deleteCloudinaryImage(this.cloudinaryCredentials(), current.cloudinaryPublicId);
+        } catch (error) {
+          this.logCloudinaryFailure('cleanup', error);
+          throw new ServiceUnavailableException('Image storage is temporarily unavailable. The image can be safely retried.');
+        }
+
+        const removed = await tx.productImage.deleteMany({ where: { id, productId: null } });
+        if (removed.count !== 1) throw new ConflictException('This image is attached to a product or has already been removed.');
+      }, { timeout: 20_000 });
+      return;
+    }
+
     const removed = await this.prisma.productImage.deleteMany({ where: { id, productId: null } });
     if (removed.count !== 1) throw new ConflictException('This image is attached to a product or has already been removed.');
     // A filesystem cleanup error leaves an orphaned generated file, but cannot
     // leave a product record pointing at a file that was already removed.
     await rm(resolve(imageRoot(), image.storageKey), { force: true });
+  }
+
+  private cloudinaryCredentials() {
+    return {
+      cloudName: this.config.getOrThrow<string>('CLOUDINARY_CLOUD_NAME'),
+      apiKey: this.config.getOrThrow<string>('CLOUDINARY_API_KEY'),
+      apiSecret: this.config.getOrThrow<string>('CLOUDINARY_API_SECRET'),
+    };
+  }
+
+  private logCloudinaryFailure(action: string, error: unknown): void {
+    const status = error instanceof CloudinaryStorageError ? error.status : undefined;
+    this.logger.warn(status ? `Cloudinary ${action} failed (HTTP ${status}).` : `Cloudinary ${action} failed.`);
   }
 }
 

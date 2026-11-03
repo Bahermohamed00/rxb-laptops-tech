@@ -49,9 +49,25 @@ export function ProductImageUpload({ csrfToken, initial, onChange }: { csrfToken
     setImages(next); onChange(next)
   }
 
-  function remove(image: GalleryImage) {
-    update(currentImages.current.filter(item => item.id !== image.id))
-    if (!originalIds.current.has(image.id)) void deleteUnattachedImage(image.id, csrfToken).catch(() => undefined)
+  async function remove(image: GalleryImage) {
+    if (originalIds.current.has(image.id)) {
+      update(currentImages.current.filter(item => item.id !== image.id))
+      return
+    }
+
+    setBusy(true)
+    setError('')
+    setProgress('Deleting image…')
+    try {
+      await deleteUnattachedImage(image.id, csrfToken)
+      update(currentImages.current.filter(item => item.id !== image.id))
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : 'The image could not be deleted.'
+      setError(`${message} The image is still selected; select Remove again to retry.`)
+    } finally {
+      setBusy(false)
+      setProgress(null)
+    }
   }
 
   function move(index: number, target: number) {

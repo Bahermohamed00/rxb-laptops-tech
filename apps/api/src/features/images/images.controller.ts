@@ -21,7 +21,13 @@ export class AdminImagesController {
 export class PublicImagesController {
   constructor(private readonly images: ImagesService) {}
   @Get(':id') async get(@Param('id', ParseUUIDPipe) id: string, @Res() response: Response): Promise<void> {
-    const { image, bytes } = await this.images.read(id);
+    const { image, bytes, redirectUrl } = await this.images.read(id);
+    if (redirectUrl) {
+      response.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      response.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      response.redirect(302, redirectUrl);
+      return;
+    }
     response.setHeader('Content-Type', image.contentType);
     response.setHeader('Content-Length', image.byteSize);
     response.setHeader('X-Content-Type-Options', 'nosniff');
