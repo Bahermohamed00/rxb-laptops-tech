@@ -8,8 +8,8 @@ const columns = [
     links: [
       { label: 'Laptops', href: '/laptops' },
       { label: 'Gaming Laptops', href: '/laptops?use=GAMING' },
-      { label: 'Workstations', href: '/laptops?use=WORK' },
-      { label: 'Accessories', href: '/laptops#accessories' },
+      { label: 'Workstations', href: '/laptops?use=WORKSTATION' },
+      { label: 'Accessories', href: '/accessories' },
       { label: 'Deals', href: '/#featured' },
     ],
   },

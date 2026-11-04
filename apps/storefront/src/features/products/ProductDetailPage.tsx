@@ -225,7 +225,7 @@ export function ProductDetailPage({ product, onClose }: { product: StoreProduct;
         <button type="button" className="pd-back" onClick={onClose}>← Back</button>
         <ol>
           <li><a href="/">Home</a></li>
-          <li><a href={isLaptop ? '/laptops' : '/laptops#accessories'}>{isLaptop ? 'Laptops' : 'Accessories'}</a></li>
+          <li><a href={isLaptop ? '/laptops' : '/accessories'}>{isLaptop ? 'Laptops' : 'Accessories'}</a></li>
           <li aria-current="page">{shownProduct.brand} {shownProduct.model}</li>
         </ol>
       </nav>

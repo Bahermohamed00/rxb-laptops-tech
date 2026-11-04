@@ -51,6 +51,7 @@ enum LaptopUseCase {
   WORK
   STUDY
   GAMING
+  WORKSTATION
 }
 
 enum RamType {

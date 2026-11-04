@@ -39,7 +39,7 @@ export class ProductDto {
   @IsOptional() @IsString() @MaxLength(10000) description?: string;
   @IsIn(['NEW', 'PRE_OWNED']) condition!: 'NEW'|'PRE_OWNED';
   @IsOptional() @IsString() @MaxLength(1000) conditionNotes?: string;
-  @IsOptional() @IsIn(['WORK', 'STUDY', 'GAMING']) useCase?: 'WORK'|'STUDY'|'GAMING'|null;
+  @IsOptional() @IsIn(['WORK', 'STUDY', 'GAMING', 'WORKSTATION']) useCase?: 'WORK'|'STUDY'|'GAMING'|'WORKSTATION'|null;
   @IsOptional() @IsObject() specs?: Record<string, unknown>;
   @IsIn(['DRAFT', 'ACTIVE', 'ARCHIVED']) status!: 'DRAFT'|'ACTIVE'|'ARCHIVED';
   @Type(() => Number) @IsInt() @Min(1) @Max(1_000_000_000) priceMinor!: number;
@@ -106,7 +106,7 @@ export class ProductSearchDto {
   @IsOptional() @IsUUID() accessoryCategoryId?: string;
   @IsOptional() @IsIn(['NEW', 'PRE_OWNED']) condition?: 'NEW'|'PRE_OWNED';
   @IsOptional() @IsIn(['DRAFT', 'ACTIVE', 'ARCHIVED']) status?: 'DRAFT'|'ACTIVE'|'ARCHIVED';
-  @IsOptional() @IsIn(['WORK', 'STUDY', 'GAMING', 'UNCATEGORIZED']) useCase?: 'WORK'|'STUDY'|'GAMING'|'UNCATEGORIZED';
+  @IsOptional() @IsIn(['WORK', 'STUDY', 'GAMING', 'WORKSTATION', 'UNCATEGORIZED']) useCase?: 'WORK'|'STUDY'|'GAMING'|'WORKSTATION'|'UNCATEGORIZED';
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(1_000_000_000) minPriceMinor?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(1_000_000_000) maxPriceMinor?: number;
   @IsOptional() @IsString() @MaxLength(200) cpu?: string;

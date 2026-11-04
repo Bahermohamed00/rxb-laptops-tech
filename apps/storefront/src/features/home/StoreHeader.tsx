@@ -10,17 +10,17 @@ import type { Theme } from '../../theme/useTheme'
 const categoryLinks = [
   { label: 'Gaming Laptops', href: '/laptops?use=GAMING', Icon: GamepadIcon },
   { label: 'Business Laptops', href: '/laptops?use=WORK', Icon: BriefcaseIcon },
-  { label: 'Workstations', href: '/laptops?use=WORK', Icon: CpuIcon },
+  { label: 'Workstations', href: '/laptops?use=WORKSTATION', Icon: CpuIcon },
   { label: 'Student Laptops', href: '/laptops?use=STUDY', Icon: GraduationIcon },
-  { label: 'Accessories', href: '/laptops#accessories', Icon: MouseIcon },
+  { label: 'Accessories', href: '/accessories', Icon: MouseIcon },
   { label: 'All Laptops', href: '/laptops', Icon: LaptopIcon },
 ]
 
 const navLinks = [
   { label: 'Laptops', href: '/laptops' },
   { label: 'Gaming', href: '/laptops?use=GAMING' },
-  { label: 'Workstations', href: '/laptops?use=WORK' },
-  { label: 'Accessories', href: '/laptops#accessories' },
+  { label: 'Workstations', href: '/laptops?use=WORKSTATION' },
+  { label: 'Accessories', href: '/accessories' },
   { label: 'Brands', href: '/#brands' },
 ]
 

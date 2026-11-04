@@ -8,7 +8,7 @@ export type AccessoryCategory = { id: string; name: string; normalizedName: stri
 export type ProductSpecs = Record<string, string | number>
 export type ApiProduct = {
   id: string; slug: string; sku?: string | null; productType: ProductType; accessoryCategoryId?: string | null; accessoryCategory?: AccessoryCategory | null; brand: string; model: string; serialNumber?: string | null; trackingMode?: 'LEGACY_QUANTITY'|'INDIVIDUAL'; unitStatus?: 'AVAILABLE'|'SOLD'|'REMOVED'|null; description: string; condition: 'NEW'|'PRE_OWNED'; conditionNotes?: string | null;
-  useCase: 'WORK'|'STUDY'|'GAMING'|null;
+  useCase: 'WORK'|'STUDY'|'GAMING'|'WORKSTATION'|null;
   status: 'DRAFT'|'ACTIVE'|'ARCHIVED'; currency: string; priceMinor: number; cpu: string|null; gpu: string|null; baseRamGB: number|null; baseRamType: string|null;
   baseStorageGB: number|null; baseStorageType: string|null; displaySizeInches?: number | null; displayResolution?: string | null; displayPanel?: string | null;
   refreshRateHz?: number | null; specs: ProductSpecs; stockQuantity: number; createdAt: string; updatedAt: string;
@@ -20,7 +20,7 @@ export type ProductPayload = Omit<ApiProduct, 'id'|'createdAt'|'updatedAt'|'curr
   stockQuantity?: number; specs: ProductSpecs; serialNumber?: string; imageId?: string; imageIds?: string[]; ramOptions: RamOption[]; storageOptions: StorageOption[]; combinations: UpgradeCombination[];
 }
 export type ProductSearch = {
-  q?: string; productType?: ProductType; family?: 'LAPTOP'|'ACCESSORY'; stockStatus?: 'IN_STOCK'|'OUT_OF_STOCK'; accessoryCategoryId?: string; condition?: ApiProduct['condition']; status?: ApiProduct['status']; useCase?: 'WORK'|'STUDY'|'GAMING'|'UNCATEGORIZED';
+  q?: string; productType?: ProductType; family?: 'LAPTOP'|'ACCESSORY'; stockStatus?: 'IN_STOCK'|'OUT_OF_STOCK'; accessoryCategoryId?: string; condition?: ApiProduct['condition']; status?: ApiProduct['status']; useCase?: 'WORK'|'STUDY'|'GAMING'|'WORKSTATION'|'UNCATEGORIZED';
   minPriceMinor?: number; maxPriceMinor?: number; cpu?: string; gpu?: string; ramGB?: number; ramType?: string;
   storageGB?: number; storageType?: string; displaySizeInches?: number; displayResolution?: string;
   page?: number; pageSize?: number; sort?: 'PRICE_ASC'|'PRICE_DESC'|'NAME_ASC'|'NAME_DESC'|'CREATED_DESC'|'UPDATED_DESC';

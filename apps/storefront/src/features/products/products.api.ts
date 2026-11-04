@@ -6,7 +6,7 @@ export type StoreProductType = 'LAPTOP'|'KEYBOARD'|'MOUSE'|'MOUSE_PAD'|'OTHER_AC
 export type StoreProductSpecs = Record<string, string | number>
 export type StoreProduct = {
   id: string; slug: string; sku?: string | null; productType: StoreProductType; accessoryCategory?: { id: string; name: string; slug: string } | null; brand: string; model: string; description: string; condition: 'NEW'|'PRE_OWNED'; conditionNotes: string | null;
-  useCase: 'WORK'|'STUDY'|'GAMING'|null;
+  useCase: 'WORK'|'STUDY'|'GAMING'|'WORKSTATION'|null;
   currency: string; priceMinor: number; cpu: string | null; gpu: string | null; baseRamGB: number | null; baseRamType: string | null; baseStorageGB: number | null;
   baseStorageType: string | null; displaySizeInches: number | null; displayResolution: string | null; displayPanel: string | null; refreshRateHz: number | null;
   specs: StoreProductSpecs; available: boolean; imageUrl: string | null; imageUrls?: string[]; ramOptions: PublicOption[]; storageOptions: PublicOption[]; combinations: PublicCombination[];

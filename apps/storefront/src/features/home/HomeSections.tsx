@@ -11,8 +11,8 @@ const delay = (index: number) => ({ '--d': `${index * 90}ms` }) as CSSProperties
 const categories = [
   { title: 'Gaming Laptops', text: 'High FPS. No Limits.', href: '/laptops?use=GAMING', image: 'rxb_gaming_laptops.png', position: 'center 55%' },
   { title: 'Business Laptops', text: 'Built for Productivity.', href: '/laptops?use=WORK', image: 'rxb_business_laptops.png', position: 'center 62%' },
-  { title: 'Workstations', text: 'For Creative Professionals.', href: '/laptops?use=WORK', image: 'rxb_workstations.png', position: 'center 52%' },
-  { title: 'Accessories', text: 'Upgrade Your Setup.', href: '/laptops#accessories', image: 'rxb_accessories.png', position: 'center 50%' },
+  { title: 'Workstations', text: 'For Creative Professionals.', href: '/laptops?use=WORKSTATION', image: 'rxb_workstations.png', position: 'center 52%' },
+  { title: 'Accessories', text: 'Upgrade Your Setup.', href: '/accessories', image: 'rxb_accessories.png', position: 'center 50%' },
 ]
 
 /*
@@ -67,6 +67,20 @@ function Featured({ products, loading, error, onRetry, onOpen }: FeaturedProps) 
   </section>
 }
 
+function Accessories({ products, loading, error, onRetry, onOpen }: FeaturedProps) {
+  const accessories = products
+    .filter(product => product.productType !== 'LAPTOP')
+    .sort((a, b) => Number(b.available) - Number(a.available))
+    .slice(0, 4)
+  return <section className="sf-container sf-section" id="accessories" aria-labelledby="sf-home-accessories-title">
+    <SectionHead id="sf-home-accessories-title" title="Accessories" text="Keyboards, mice, and more to complete your setup." link={{ label: 'View All Accessories', href: '/accessories' }} />
+    {error ? <div className="sf-state" role="alert"><strong>We couldn’t load accessories.</strong><span>{error}</span><button type="button" className="sf-btn sf-btn-ghost" onClick={onRetry}>Try again</button></div>
+      : loading ? <div className="sf-product-grid" role="status" aria-label="Loading accessories">{Array.from({ length: 4 }, (_, index) => <ProductTileSkeleton key={index} />)}</div>
+        : accessories.length ? <div className="sf-product-grid">{accessories.map((product, index) => <ProductTile key={product.id} product={product} index={index} onOpen={() => onOpen(product)} />)}</div>
+          : <div className="sf-state"><strong>Accessories are being listed.</strong><span>Looking for something specific? Ask us and we’ll help you find it.</span><a className="sf-btn sf-btn-primary" href={whatsappUrl('Hello RXB, I am looking for an accessory. Can you help?')} target="_blank" rel="noreferrer">Ask on WhatsApp</a></div>}
+  </section>
+}
+
 function BrandCard({ brand }: { brand: typeof brands[number] }) {
   const [missing, setMissing] = useState(false)
   const showName = missing || brand.kind === 'mark'
@@ -115,6 +129,7 @@ export function HomeSections(props: FeaturedProps) {
     <Hero />
     <Categories />
     <Featured {...props} />
+    <Accessories {...props} />
     <Brands />
     <div className="sf-container"><Newsletter /></div>
   </>
